@@ -6,7 +6,7 @@ import { api, getErrorMessage } from '@/lib/api';
 import { useI18n } from '@/lib/i18n-context';
 import { useAuth } from '@/lib/auth-context';
 import toast from 'react-hot-toast';
-import { Loader, Send, MessageSquarePlus, X, Inbox as InboxIcon } from 'lucide-react';
+import { Loader, Send, MessageSquarePlus, X, Inbox as InboxIcon, Settings, Check } from 'lucide-react';
 import { PageHeader } from '@/app/dashboard/admin/components';
 
 interface Conv {
@@ -61,6 +61,11 @@ export default function InboxPage() {
     const [text, setText] = useState('');
     const [sending, setSending] = useState(false);
     const [newOpen, setNewOpen] = useState(false);
+    const [nameSettingsOpen, setNameSettingsOpen] = useState(false);
+    const [loadingNameSettings, setLoadingNameSettings] = useState(false);
+    const [savingNameSettings, setSavingNameSettings] = useState(false);
+    const [inboxDisplayName, setInboxDisplayName] = useState('');
+    const [inboxUseOfficialName, setInboxUseOfficialName] = useState(true);
     const [contacts, setContacts] = useState<Contacts>({ admins: [], instructors: [], students: [] });
     const threadBoxRef = useRef<HTMLDivElement>(null);
 
@@ -153,6 +158,48 @@ export default function InboxPage() {
         }
     };
 
+    const openNameSettings = async () => {
+        setNameSettingsOpen(true);
+        setLoadingNameSettings(true);
+        try {
+            const res = await api.get('/users/me');
+            const metadata = res.data?.metadata && typeof res.data.metadata === 'object'
+                ? res.data.metadata as Record<string, unknown>
+                : {};
+            setInboxDisplayName(typeof metadata.inboxDisplayName === 'string' ? metadata.inboxDisplayName : '');
+            setInboxUseOfficialName(metadata.inboxUseOfficialName !== false);
+        } catch (err) {
+            setNameSettingsOpen(false);
+            toast.error(getErrorMessage(err) || t('inbox.name_settings_failed'));
+        } finally {
+            setLoadingNameSettings(false);
+        }
+    };
+
+    const saveNameSettings = async () => {
+        const displayName = inboxDisplayName.trim();
+        if (!inboxUseOfficialName && !displayName) {
+            toast.error(t('inbox.display_name_required'));
+            return;
+        }
+        setSavingNameSettings(true);
+        try {
+            await api.patch('/users/me', {
+                metadata: {
+                    inboxDisplayName: displayName,
+                    inboxUseOfficialName,
+                },
+            });
+            toast.success(t('inbox.name_settings_saved'));
+            setNameSettingsOpen(false);
+            loadConversations();
+        } catch (err) {
+            toast.error(getErrorMessage(err) || t('inbox.name_settings_failed'));
+        } finally {
+            setSavingNameSettings(false);
+        }
+    };
+
     const startContact = (c: Contact) => {
         const conv: Conv = {
             id: `${c.id}|${c.course?.id ?? ''}|${c.openingId ?? ''}`,
@@ -198,7 +245,11 @@ export default function InboxPage() {
     const isStudent = user?.role === 'STUDENT';
     const isInstructor = user?.role === 'INSTRUCTOR';
     const groupLabel = (): [string, Contact[]][] => {
-        if (isStudent) return [[t('inbox.enrolled_courses'), contacts.instructors], [t('inbox.contact_support'), contacts.admins]];
+        if (isStudent) return [
+            [t('inbox.enrolled_courses'), contacts.instructors],
+            [t('inbox.batch_classmates'), contacts.students],
+            [t('inbox.contact_support'), contacts.admins],
+        ];
         if (isInstructor) return [[t('inbox.my_students'), contacts.students], [t('inbox.contact_support'), contacts.admins]];
         return [[t('inbox.all_students'), contacts.students], [t('inbox.contact_support'), contacts.admins]];
     };
@@ -213,9 +264,16 @@ export default function InboxPage() {
                     title={t('inbox.title')}
                     subtitle={t('inbox.subtitle')}
                     actions={
-                        <button onClick={openNew} className="inline-flex items-center gap-2 bg-gradient-to-r from-brand-gold to-brand-gold-dark text-black px-4 py-2.5 rounded-xl font-bold hover:from-brand-gold-light hover:to-brand-gold transition cursor-pointer">
-                            <MessageSquarePlus size={18} /> {t('inbox.new_message')}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                            {isStudent && (
+                                <button onClick={openNameSettings} className="inline-flex items-center gap-2 border border-gray-300 dark:border-white/10 text-brand-navy dark:text-white px-4 py-2.5 rounded-xl font-bold hover:bg-gray-100 dark:hover:bg-white/5 transition cursor-pointer">
+                                    <Settings size={18} /> {t('inbox.display_name_settings')}
+                                </button>
+                            )}
+                            <button onClick={openNew} className="inline-flex items-center gap-2 bg-gradient-to-r from-brand-gold to-brand-gold-dark text-black px-4 py-2.5 rounded-xl font-bold hover:from-brand-gold-light hover:to-brand-gold transition cursor-pointer">
+                                <MessageSquarePlus size={18} /> {t('inbox.new_message')}
+                            </button>
+                        </div>
                     }
                 />
 
@@ -361,6 +419,65 @@ export default function InboxPage() {
                                                                 </span>
                                                                 {peerStudent && c.requestStatus === 'APPROVED' && (
                                                                     <span className="block text-xs text-brand-gold-light mt-1">{t('inbox.open_thread')}</span>
+                                                                )}
+
+                                                                {nameSettingsOpen && (
+                                                                    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !savingNameSettings && setNameSettingsOpen(false)}>
+                                                                        <div
+                                                                            role="dialog"
+                                                                            aria-modal="true"
+                                                                            aria-labelledby="inbox-name-settings-title"
+                                                                            className="bg-white dark:bg-brand-navy-dark rounded-3xl shadow-2xl p-6 sm:p-8 w-full max-w-md border border-gray-200 dark:border-white/10"
+                                                                            onClick={(event) => event.stopPropagation()}
+                                                                        >
+                                                                            <div className="flex items-center justify-between gap-3 mb-5">
+                                                                                <h2 id="inbox-name-settings-title" className="text-xl font-black text-brand-navy dark:text-white">{t('inbox.display_name_settings')}</h2>
+                                                                                <button onClick={() => setNameSettingsOpen(false)} disabled={savingNameSettings} className="text-gray-500 hover:text-brand-navy dark:hover:text-white disabled:opacity-50" aria-label={t('inbox.close')}>
+                                                                                    <X size={20} />
+                                                                                </button>
+                                                                            </div>
+                                                                            {loadingNameSettings ? (
+                                                                                <div className="flex justify-center py-10"><Loader className="animate-spin text-brand-gold-dark dark:text-brand-gold-light" size={24} /></div>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">{t('inbox.display_name_description')}</p>
+                                                                                    <label className="flex items-center gap-3 text-sm font-bold text-brand-navy dark:text-white cursor-pointer mb-5">
+                                                                                        <input
+                                                                                            type="checkbox"
+                                                                                            checked={inboxUseOfficialName}
+                                                                                            onChange={(event) => setInboxUseOfficialName(event.target.checked)}
+                                                                                            className="accent-amber-500"
+                                                                                        />
+                                                                                        {t('inbox.use_official_name')}
+                                                                                    </label>
+                                                                                    {!inboxUseOfficialName && (
+                                                                                        <div className="mb-6">
+                                                                                            <label htmlFor="inbox-display-name" className="block text-sm font-bold text-brand-navy dark:text-white mb-2">{t('inbox.display_name')}</label>
+                                                                                            <input
+                                                                                                id="inbox-display-name"
+                                                                                                type="text"
+                                                                                                value={inboxDisplayName}
+                                                                                                onChange={(event) => setInboxDisplayName(event.target.value.slice(0, 80))}
+                                                                                                maxLength={80}
+                                                                                                autoComplete="nickname"
+                                                                                                dir="auto"
+                                                                                                className="w-full px-4 py-3 bg-white dark:bg-brand-navy border border-gray-300 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-brand-gold outline-none text-brand-navy dark:text-white"
+                                                                                            />
+                                                                                        </div>
+                                                                                    )}
+                                                                                    <div className="flex gap-3">
+                                                                                        <button onClick={saveNameSettings} disabled={savingNameSettings} className="flex-1 inline-flex items-center justify-center gap-2 bg-gradient-to-r from-brand-gold to-brand-gold-dark text-black py-3 font-bold rounded-xl disabled:opacity-50">
+                                                                                            {savingNameSettings ? <Loader size={18} className="animate-spin" /> : <Check size={18} />}
+                                                                                            {t('inbox.save_name_settings')}
+                                                                                        </button>
+                                                                                        <button onClick={() => setNameSettingsOpen(false)} disabled={savingNameSettings} className="px-5 bg-gray-100 dark:bg-white/5 text-brand-navy dark:text-white font-bold rounded-xl disabled:opacity-50">
+                                                                                            {t('inbox.cancel')}
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
                                                                 )}
                                                             </button>
                                                             {peerStudent && (
