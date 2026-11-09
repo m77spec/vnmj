@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EncryptionService } from '../encryption/encryption.service';
-import { EnrollmentStatus, Role, StudentMessageRequestStatus } from '@prisma/client';
+import { EnrollmentStatus, Prisma, Role, StudentMessageRequestStatus } from '@prisma/client';
 import { toPublicInstructor } from '../common/public-instructor';
 
 @Injectable()
@@ -46,9 +46,18 @@ export class MessagesService {
         return {
             id: user.id,
             role: user.role,
-            nameAr: names.nameAr ?? (user.role === Role.ADMIN ? 'إدارة المنصة' : null),
-            nameEn: names.nameEn ?? (user.role === Role.ADMIN ? 'Platform Administration' : null),
+            nameAr: user.role === Role.ADMIN ? 'المدير' : names.nameAr,
+            nameEn: user.role === Role.ADMIN ? 'Manager' : names.nameEn,
         };
+    }
+
+    private async getActiveAdminIds() {
+        const admins = await this.prisma.user.findMany({
+            where: { role: Role.ADMIN, isActive: true },
+            select: { id: true },
+            orderBy: { createdAt: 'asc' },
+        });
+        return admins.map((admin) => admin.id);
     }
 
     private async hasAcceptedEnrollment(userId: string, openingId: string) {
@@ -174,11 +183,13 @@ export class MessagesService {
         };
     }
 
-    async getConversations(userId: string) {
+    async getConversations(user: { userId: string; role: Role }) {
+        const adminIds = user.role === Role.ADMIN ? await this.getActiveAdminIds() : [];
+        const where: Prisma.MessageWhereInput = user.role === Role.ADMIN
+            ? { OR: [{ senderId: { in: adminIds } }, { recipientId: { in: adminIds } }] }
+            : { OR: [{ senderId: user.userId }, { recipientId: user.userId }] };
         const messages = await this.prisma.message.findMany({
-            where: {
-                OR: [{ senderId: userId }, { recipientId: userId }],
-            },
+            where,
             include: {
                 sender: { select: { id: true, role: true, metadata: true } },
                 recipient: { select: { id: true, role: true, metadata: true } },
@@ -187,10 +198,28 @@ export class MessagesService {
             },
             orderBy: { createdAt: 'asc' },
         });
+        const sharedMessages = user.role === Role.ADMIN
+            ? messages.filter((message) => message.sender.role !== Role.ADMIN || message.recipient.role !== Role.ADMIN)
+            : messages;
+        const hasDirectAdminMessages = user.role !== Role.ADMIN && sharedMessages.some((message) =>
+            !message.courseId && !message.openingId
+            && (message.sender.role === Role.ADMIN || message.recipient.role === Role.ADMIN),
+        );
+        const managerContact = hasDirectAdminMessages ? (await this.getSupportAdmins())[0] : undefined;
+        const managerId = managerContact?.id;
 
-        const groups = new Map<string, typeof messages>();
-        for (const m of messages) {
-            const otherId = m.senderId === userId ? m.recipientId : m.senderId;
+        const groups = new Map<string, typeof sharedMessages>();
+        for (const m of sharedMessages) {
+            const other = user.role === Role.ADMIN
+                ? (m.sender.role === Role.ADMIN ? m.recipient : m.sender)
+                : (m.senderId === user.userId ? m.recipient : m.sender);
+            const isDirectManagerThread = user.role !== Role.ADMIN
+                && other.role === Role.ADMIN
+                && !m.courseId
+                && !m.openingId;
+            const otherId = isDirectManagerThread
+                ? managerId ?? other.id
+                : other.id;
             const key = `${otherId}|${m.courseId ?? ''}|${m.openingId ?? ''}`;
             const list = groups.get(key) ?? [];
             list.push(m);
@@ -199,11 +228,22 @@ export class MessagesService {
 
         const conversations = Array.from(groups.entries()).map(([key, msgs]) => {
             const last = msgs[msgs.length - 1];
-            const other = last.senderId === userId ? last.recipient : last.sender;
-            const unreadCount = msgs.filter((m) => m.recipientId === userId && !m.readAt).length;
+            const other = user.role === Role.ADMIN
+                ? (last.sender.role === Role.ADMIN ? last.recipient : last.sender)
+                : (last.senderId === user.userId ? last.recipient : last.sender);
+            const otherContact = user.role !== Role.ADMIN
+                && other.role === Role.ADMIN
+                && !last.courseId
+                && !last.openingId
+                ? (managerContact ?? this.safeContact(other))
+                : this.safeContact(other);
+            const unreadCount = msgs.filter((m) =>
+                (user.role === Role.ADMIN ? adminIds.includes(m.recipientId) : m.recipientId === user.userId)
+                && !m.readAt,
+            ).length;
             return {
                 id: key,
-                otherUser: this.safeContact(other),
+                otherUser: otherContact,
                 course: last.course
                     ? { id: last.course.id, titleAr: last.course.titleAr, titleEn: last.course.titleEn }
                     : null,
@@ -211,7 +251,7 @@ export class MessagesService {
                 lastMessage: {
                     content: this.encryption.tryDecrypt(last.content),
                     createdAt: last.createdAt,
-                    fromMe: last.senderId === userId,
+                    fromMe: last.senderId === user.userId,
                     read: !!last.readAt,
                 },
                 unreadCount,
@@ -225,13 +265,25 @@ export class MessagesService {
 
     async getThread(user: { userId: string; role: Role }, otherId: string, courseId?: string, openingId?: string) {
         if (!otherId) throw new BadRequestException('with (userId) is required');
-        await this.validateSend(user, otherId, courseId, openingId);
-        const where: any = {
-            OR: [
-                { senderId: user.userId, recipientId: otherId },
-                { senderId: otherId, recipientId: user.userId },
-            ],
-        };
+        const otherUser = await this.validateSend(user, otherId, courseId, openingId);
+        const isSharedManagerThread = !courseId && !openingId
+            && ((user.role === Role.ADMIN && otherUser.role !== Role.ADMIN)
+                || (user.role !== Role.ADMIN && otherUser.role === Role.ADMIN));
+        const adminIds = isSharedManagerThread ? await this.getActiveAdminIds() : [];
+        const participantId = user.role === Role.ADMIN ? otherId : user.userId;
+        const where: Prisma.MessageWhereInput = isSharedManagerThread
+            ? {
+                OR: [
+                    { senderId: participantId, recipientId: { in: adminIds } },
+                    { senderId: { in: adminIds }, recipientId: participantId },
+                ],
+            }
+            : {
+                OR: [
+                    { senderId: user.userId, recipientId: otherId },
+                    { senderId: otherId, recipientId: user.userId },
+                ],
+            };
         if (courseId) {
             where.courseId = courseId;
             await this.getCourseOrThrow(courseId);
@@ -252,12 +304,16 @@ export class MessagesService {
 
     async markRead(user: { userId: string; role: Role }, otherId: string, courseId?: string, openingId?: string) {
         if (!otherId) throw new BadRequestException('with (userId) is required');
-        await this.validateSend(user, otherId, courseId, openingId);
-        const where: any = {
-            senderId: otherId,
-            recipientId: user.userId,
-            readAt: null,
-        };
+        const otherUser = await this.validateSend(user, otherId, courseId, openingId);
+        const isSharedManagerThread = !courseId && !openingId
+            && ((user.role === Role.ADMIN && otherUser.role !== Role.ADMIN)
+                || (user.role !== Role.ADMIN && otherUser.role === Role.ADMIN));
+        const adminIds = isSharedManagerThread ? await this.getActiveAdminIds() : [];
+        const where: Prisma.MessageWhereInput = isSharedManagerThread
+            ? user.role === Role.ADMIN
+                ? { senderId: otherId, recipientId: { in: adminIds }, readAt: null }
+                : { senderId: { in: adminIds }, recipientId: user.userId, readAt: null }
+            : { senderId: otherId, recipientId: user.userId, readAt: null };
         if (courseId) where.courseId = courseId;
         if (openingId) where.openingId = openingId;
         const result = await this.prisma.message.updateMany({
@@ -267,9 +323,13 @@ export class MessagesService {
         return { updated: result.count };
     }
 
-    async getUnreadCount(userId: string) {
+    async getUnreadCount(user: { userId: string; role: Role }) {
+        const adminIds = user.role === Role.ADMIN ? await this.getActiveAdminIds() : [];
         const count = await this.prisma.message.count({
-            where: { recipientId: userId, readAt: null },
+            where: {
+                recipientId: user.role === Role.ADMIN ? { in: adminIds } : user.userId,
+                readAt: null,
+            },
         });
         return { count };
     }
@@ -280,11 +340,11 @@ export class MessagesService {
             select: { id: true, role: true, metadata: true },
             orderBy: { createdAt: 'asc' },
         });
-        return admins.map((admin) => this.safeContact(admin));
+        return admins.slice(0, 1).map((admin) => this.safeContact(admin));
     }
 
     async getContacts(user: { userId: string; role: Role }) {
-        const admins = await this.getSupportAdmins();
+        const admins = user.role === Role.ADMIN ? [] : await this.getSupportAdmins();
         const accepted = [EnrollmentStatus.APPROVED, EnrollmentStatus.RESERVED];
 
         if (user.role === Role.STUDENT) {
@@ -509,5 +569,24 @@ export class MessagesService {
         });
         if (result.count !== 1) throw new BadRequestException('Message request has already been answered');
         return { ok: true, status: approved ? StudentMessageRequestStatus.APPROVED : StudentMessageRequestStatus.REJECTED };
+    }
+
+    async cancelStudentMessageRequest(user: { userId: string; role: Role }, requestId: string) {
+        if (user.role !== Role.STUDENT) throw new ForbiddenException('Only students can cancel peer messaging requests');
+        const request = await this.prisma.studentMessageRequest.findUnique({ where: { id: requestId } });
+        if (!request || request.requesterId !== user.userId) throw new NotFoundException('Message request not found');
+        if (request.status !== StudentMessageRequestStatus.PENDING) {
+            throw new BadRequestException('Only pending message requests can be cancelled');
+        }
+        const result = await this.prisma.studentMessageRequest.updateMany({
+            where: {
+                id: requestId,
+                requesterId: user.userId,
+                status: StudentMessageRequestStatus.PENDING,
+            },
+            data: { status: StudentMessageRequestStatus.CANCELLED },
+        });
+        if (result.count !== 1) throw new BadRequestException('Message request has already been answered');
+        return { ok: true, status: StudentMessageRequestStatus.CANCELLED };
     }
 }

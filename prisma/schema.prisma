@@ -27,6 +27,7 @@ enum StudentMessageRequestStatus {
   PENDING
   APPROVED
   REJECTED
+  CANCELLED
 }
 
 enum CourseOpeningStatus {

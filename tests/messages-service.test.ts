@@ -139,7 +139,7 @@ describe('student peer messaging', () => {
         const service = new MessagesService(prisma, {} as any);
         const contacts = await service.getContacts(sender);
 
-        assert.equal(contacts.admins[0].nameAr, 'مدير المنصة');
+        assert.equal(contacts.admins[0].nameAr, 'المدير');
         assert.equal('email' in contacts.admins[0], false);
         assert.equal(contacts.instructors[0].nameEn, 'Assigned Instructor');
         assert.equal('email' in contacts.instructors[0], false);
@@ -196,5 +196,200 @@ describe('student peer messaging', () => {
         );
         assert.equal(updated.status, StudentMessageRequestStatus.APPROVED);
         assert.deepEqual(response, { ok: true, status: StudentMessageRequestStatus.APPROVED });
+    });
+
+    test('a requester can cancel their own pending request', async () => {
+        let updateArgs: any;
+        const prisma: any = {
+            studentMessageRequest: {
+                findUnique: async () => ({
+                    id: 'request-1',
+                    requesterId: 'student-1',
+                    status: StudentMessageRequestStatus.PENDING,
+                }),
+                updateMany: async (args: any) => {
+                    updateArgs = args;
+                    return { count: 1 };
+                },
+            },
+        };
+        const service = new MessagesService(prisma, {} as any);
+
+        const result = await service.cancelStudentMessageRequest(sender, 'request-1');
+
+        assert.deepEqual(updateArgs, {
+            where: {
+                id: 'request-1',
+                requesterId: 'student-1',
+                status: StudentMessageRequestStatus.PENDING,
+            },
+            data: { status: StudentMessageRequestStatus.CANCELLED },
+        });
+        assert.deepEqual(result, { ok: true, status: StudentMessageRequestStatus.CANCELLED });
+    });
+
+    test("a student cannot cancel another student's request", async () => {
+        const prisma: any = {
+            studentMessageRequest: {
+                findUnique: async () => ({
+                    id: 'request-1',
+                    requesterId: 'student-2',
+                    status: StudentMessageRequestStatus.PENDING,
+                }),
+            },
+        };
+        const service = new MessagesService(prisma, {} as any);
+
+        await assert.rejects(
+            () => service.cancelStudentMessageRequest(sender, 'request-1'),
+            (error: unknown) => error instanceof Error && error.name === 'NotFoundException',
+        );
+    });
+});
+
+describe('shared manager inbox', () => {
+    const admins = [{ id: 'admin-1' }, { id: 'admin-2' }];
+    const student = {
+        id: 'student-1',
+        role: Role.STUDENT,
+        metadata: { nameAr: 'الطالب' },
+    };
+    const admin = (id: string) => ({
+        id,
+        role: Role.ADMIN,
+        metadata: { nameAr: 'مشرف' },
+    });
+    const adminRecords = [admin('admin-1'), admin('admin-2')];
+
+    test('students see one manager contact and one conversation across admin replies', async () => {
+        let adminLookups = 0;
+        const messages = [
+            {
+                id: 'message-1',
+                senderId: student.id,
+                recipientId: 'admin-1',
+                sender: student,
+                recipient: admin('admin-1'),
+                courseId: null,
+                openingId: null,
+                course: null,
+                opening: null,
+                content: 'encrypted:Question',
+                createdAt: new Date('2026-01-01T00:00:00Z'),
+                readAt: null,
+            },
+            {
+                id: 'message-2',
+                senderId: 'admin-2',
+                recipientId: student.id,
+                sender: admin('admin-2'),
+                recipient: student,
+                courseId: null,
+                openingId: null,
+                course: null,
+                opening: null,
+                content: 'encrypted:Answer',
+                createdAt: new Date('2026-01-02T00:00:00Z'),
+                readAt: null,
+            },
+        ];
+        const prisma: any = {
+            user: {
+                findMany: async () => {
+                    adminLookups += 1;
+                    return adminRecords;
+                },
+            },
+            message: { findMany: async () => messages },
+        };
+        const service = new MessagesService(
+            prisma,
+            { tryDecrypt: (value: string) => value.replace('encrypted:', '') } as any,
+        );
+
+        const conversations = await service.getConversations({ userId: student.id, role: Role.STUDENT });
+        const contacts = await service.getSupportAdmins();
+
+        assert.equal(conversations.length, 1);
+        assert.equal(conversations[0].otherUser.id, 'admin-1');
+        assert.equal(conversations[0].otherUser.nameAr, 'المدير');
+        assert.equal(conversations[0].lastMessage.content, 'Answer');
+        assert.equal(contacts.length, 1);
+        assert.equal(contacts[0].nameAr, 'المدير');
+        assert.equal(adminLookups, 2);
+    });
+
+    test('every active admin sees and can mark the shared support thread as read', async () => {
+        let conversationQuery: any;
+        let threadQuery: any;
+        let readQuery: any;
+        let unreadQuery: any;
+        const prisma: any = {
+            user: {
+                findMany: async ({ select }: any) => select.role ? adminRecords : admins,
+                findUnique: async () => student,
+            },
+            message: {
+                findMany: async ({ where }: any) => {
+                    if (conversationQuery) threadQuery = where;
+                    else conversationQuery = where;
+                    return [{
+                        id: 'message-1',
+                        senderId: student.id,
+                        recipientId: 'admin-2',
+                        sender: student,
+                        recipient: admin('admin-2'),
+                        courseId: null,
+                        openingId: null,
+                        course: null,
+                        opening: null,
+                        content: 'encrypted:Question',
+                        createdAt: new Date('2026-01-01T00:00:00Z'),
+                        readAt: null,
+                    }];
+                },
+                updateMany: async ({ where }: any) => {
+                    readQuery = where;
+                    return { count: 1 };
+                },
+                count: async ({ where }: any) => {
+                    unreadQuery = where;
+                    return 1;
+                },
+            },
+        };
+        const service = new MessagesService(
+            prisma,
+            { tryDecrypt: (value: string) => value.replace('encrypted:', '') } as any,
+        );
+        const currentAdmin = { userId: 'admin-1', role: Role.ADMIN };
+
+        const conversations = await service.getConversations(currentAdmin);
+        const thread = await service.getThread(currentAdmin, student.id);
+        const read = await service.markRead(currentAdmin, student.id);
+        const unread = await service.getUnreadCount(currentAdmin);
+
+        assert.equal(conversations.length, 1);
+        assert.equal(conversations[0].otherUser.id, student.id);
+        assert.deepEqual(conversationQuery.OR, [
+            { senderId: { in: ['admin-1', 'admin-2'] } },
+            { recipientId: { in: ['admin-1', 'admin-2'] } },
+        ]);
+        assert.deepEqual(threadQuery.OR, [
+            { senderId: student.id, recipientId: { in: ['admin-1', 'admin-2'] } },
+            { senderId: { in: ['admin-1', 'admin-2'] }, recipientId: student.id },
+        ]);
+        assert.deepEqual(readQuery, {
+            senderId: student.id,
+            recipientId: { in: ['admin-1', 'admin-2'] },
+            readAt: null,
+        });
+        assert.deepEqual(unreadQuery, {
+            recipientId: { in: ['admin-1', 'admin-2'] },
+            readAt: null,
+        });
+        assert.deepEqual(read, { updated: 1 });
+        assert.equal(thread.length, 1);
+        assert.deepEqual(unread, { count: 1 });
     });
 });

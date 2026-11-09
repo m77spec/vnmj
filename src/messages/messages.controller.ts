@@ -29,7 +29,7 @@ export class MessagesController {
     @ApiOperation({ summary: 'My conversations (with last message + unread count)' })
     @Get('conversations')
     conversations(@Request() req: any) {
-        return this.messagesService.getConversations(req.user.userId);
+        return this.messagesService.getConversations(req.user);
     }
 
     @ApiOperation({ summary: 'Message thread with another user' })
@@ -57,7 +57,7 @@ export class MessagesController {
     @ApiOperation({ summary: 'Total unread message count for the current user' })
     @Get('unread-count')
     unreadCount(@Request() req: any) {
-        return this.messagesService.getUnreadCount(req.user.userId);
+        return this.messagesService.getUnreadCount(req.user);
     }
 
     @ApiOperation({ summary: 'Platform support admins' })
@@ -97,5 +97,11 @@ export class MessagesController {
     ) {
         if (typeof approved !== 'boolean') throw new BadRequestException('approved must be a boolean');
         return this.messagesService.respondToStudentMessageRequest(req.user, id, approved);
+    }
+
+    @ApiOperation({ summary: 'Cancel an outgoing pending student-to-student messaging request' })
+    @Patch('requests/:id/cancel')
+    cancelRequest(@Param('id') id: string, @Request() req: any) {
+        return this.messagesService.cancelStudentMessageRequest(req.user, id);
     }
 }

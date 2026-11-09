@@ -6,7 +6,7 @@ import { api, getErrorMessage } from '@/lib/api';
 import { useI18n } from '@/lib/i18n-context';
 import { useAuth } from '@/lib/auth-context';
 import toast from 'react-hot-toast';
-import { Loader, Send, MessageSquarePlus, X, Inbox as InboxIcon, Settings, Check } from 'lucide-react';
+import { Loader, Send, MessageSquarePlus, X, Inbox as InboxIcon, Settings, Check, Search } from 'lucide-react';
 import { PageHeader } from '@/app/dashboard/admin/components';
 
 interface Conv {
@@ -33,7 +33,7 @@ interface Contact {
     course?: { id: string; titleAr?: string | null; titleEn?: string | null } | null;
     openingId?: string | null;
     requestId?: string | null;
-    requestStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | null;
+    requestStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | null;
     requestDirection?: 'INCOMING' | 'OUTGOING' | null;
 }
 interface Contacts {
@@ -59,6 +59,7 @@ export default function InboxPage() {
     const [thread, setThread] = useState<ThreadMsg[]>([]);
     const [loadingThread, setLoadingThread] = useState(false);
     const [text, setText] = useState('');
+    const [conversationSearch, setConversationSearch] = useState('');
     const [sending, setSending] = useState(false);
     const [newOpen, setNewOpen] = useState(false);
     const [nameSettingsOpen, setNameSettingsOpen] = useState(false);
@@ -238,6 +239,18 @@ export default function InboxPage() {
         }
     };
 
+    const cancelRequest = async (c: Contact) => {
+        if (!c.requestId) return;
+        try {
+            await api.patch(`/messages/requests/${c.requestId}/cancel`);
+            toast.success(t('inbox.request_cancelled'));
+            const res = await api.get('/messages/contacts');
+            setContacts(res.data);
+        } catch (err) {
+            toast.error(getErrorMessage(err) || t('inbox.request_failed'));
+        }
+    };
+
     const contactName = (contact: Pick<Contact, 'nameAr' | 'nameEn' | 'role'>) =>
         (locale === 'ar' ? contact.nameAr || contact.nameEn : contact.nameEn || contact.nameAr)
         || t(roleLabel[contact.role] ?? 'roles.unknown');
@@ -256,6 +269,19 @@ export default function InboxPage() {
 
     const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const fmtDay = (iso: string) => new Date(iso).toLocaleDateString();
+    const fmtConversationTime = (iso: string) => {
+        const date = new Date(iso);
+        return date.toLocaleDateString() === new Date().toLocaleDateString() ? fmtTime(iso) : fmtDay(iso);
+    };
+    const filteredConversations = conversations.filter((conversation) => {
+        const query = conversationSearch.trim().toLocaleLowerCase();
+        if (!query) return true;
+        return [
+            contactName(conversation.otherUser),
+            conversation.lastMessage.content,
+            conversation.course ? pick(conversation.course, 'title') : '',
+        ].some((value) => value?.toLocaleLowerCase().includes(query));
+    });
 
     return (
         <ProtectedRoute>
@@ -277,13 +303,29 @@ export default function InboxPage() {
                     }
                 />
 
-                <div className="bg-white dark:bg-brand-navy-dark rounded-3xl shadow-sm border border-gray-200 dark:border-white/5 overflow-hidden flex flex-col md:flex-row min-h-[60vh]">
+                <div className="bg-white dark:bg-brand-navy-dark rounded-3xl shadow-sm border border-gray-200 dark:border-white/5 overflow-hidden flex flex-col md:flex-row min-h-[70vh]">
                     {/* Conversations list */}
-                    <aside className={`md:w-80 border-b md:border-b-0 md:border-e border-gray-200 dark:border-white/5 ${active ? 'hidden md:block' : 'block'}`}>
-                        <div className="p-4 border-b border-gray-200 dark:border-white/5">
-                            <h3 className="font-black text-brand-navy dark:text-white">{t('inbox.conversations')}</h3>
+                    <aside className={`md:w-[360px] md:shrink-0 border-b md:border-b-0 md:border-e border-gray-200 dark:border-white/5 ${active ? 'hidden md:flex' : 'flex'} flex-col`}>
+                        <div className="p-4 space-y-3 border-b border-gray-200 dark:border-white/5">
+                            <div className="flex items-center justify-between gap-2">
+                                <h3 className="font-black text-brand-navy dark:text-white">{t('inbox.conversations')}</h3>
+                                {conversations.length > 0 && (
+                                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{conversations.length}</span>
+                                )}
+                            </div>
+                            <label className="flex items-center gap-2 rounded-xl bg-gray-100 dark:bg-white/5 px-3 py-2.5 text-gray-500 dark:text-gray-400">
+                                <Search size={17} className="shrink-0" />
+                                <input
+                                    type="search"
+                                    value={conversationSearch}
+                                    onChange={(event) => setConversationSearch(event.target.value)}
+                                    placeholder={t('inbox.search_conversations')}
+                                    aria-label={t('inbox.search_conversations')}
+                                    className="w-full bg-transparent text-sm text-brand-navy dark:text-white placeholder:text-gray-500 outline-none"
+                                />
+                            </label>
                         </div>
-                        <div className="overflow-y-auto h-[40vh] md:h-[calc(60vh-57px)] admin-scroll">
+                        <div className="overflow-y-auto flex-1 min-h-0 max-h-[45vh] md:max-h-none admin-scroll">
                             {loadingConv ? (
                                 <div className="h-40 flex items-center justify-center"><Loader className="animate-spin text-brand-gold-dark dark:text-brand-gold-light" size={24} /></div>
                             ) : conversations.length === 0 ? (
@@ -291,29 +333,46 @@ export default function InboxPage() {
                                     <InboxIcon size={32} className="mx-auto text-gray-400 dark:text-gray-500 mb-3" />
                                     <p className="text-gray-500 dark:text-gray-400 font-bold text-sm">{t('inbox.no_conversations')}</p>
                                 </div>
+                            ) : filteredConversations.length === 0 ? (
+                                <div className="p-8 text-center">
+                                    <Search size={28} className="mx-auto text-gray-400 dark:text-gray-500 mb-3" />
+                                    <p className="text-gray-500 dark:text-gray-400 font-bold text-sm">{t('inbox.no_matching_conversations')}</p>
+                                </div>
                             ) : (
-                                conversations.map((c) => (
+                                filteredConversations.map((c) => (
                                     <button
                                         key={c.id}
                                         onClick={() => openThread(c, true)}
-                                        className={`w-full text-left px-4 py-3.5 border-b border-gray-200 dark:border-white/5 hover:bg-brand-navy/5 dark:hover:bg-white/5 transition cursor-pointer ${active?.id === c.id ? 'bg-brand-navy/5 dark:bg-white/10' : ''}`}
+                                        className={`w-full text-left px-4 py-3 border-b border-gray-200 dark:border-white/5 hover:bg-brand-navy/5 dark:hover:bg-white/5 transition cursor-pointer ${active?.id === c.id ? 'bg-brand-navy/5 dark:bg-white/10' : ''}`}
                                     >
-                                        <div className="flex items-center justify-between gap-2">
-                                            <span className="font-bold text-brand-navy dark:text-white text-sm truncate">{contactName(c.otherUser)}</span>
-                                            {c.unreadCount > 0 && (
-                                                <span className="bg-brand-gold text-black text-[10px] font-black rounded-full min-w-5 h-5 px-1.5 inline-flex items-center justify-center">
-                                                    {c.unreadCount}
-                                                </span>
-                                            )}
-                                        </div>
-                                        {c.course && (
-                                            <span className="text-xs text-brand-gold-dark dark:text-brand-gold-light font-bold block mt-0.5 truncate">{t('inbox.course')} {pick(c.course, 'title')}</span>
-                                        )}
-                                        <div className="flex items-center justify-between gap-2 mt-1">
-                                            <span className={`text-xs truncate ${c.unreadCount > 0 ? 'font-bold text-brand-navy dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
-                                                {c.lastMessage.content}
+                                        <div className="flex items-center gap-3">
+                                            <span className={`h-12 w-12 shrink-0 rounded-full flex items-center justify-center font-black text-lg ${c.unreadCount > 0 ? 'bg-brand-gold/20 text-brand-gold-dark dark:text-brand-gold-light' : 'bg-brand-navy/10 dark:bg-white/10 text-brand-navy dark:text-white'}`}>
+                                                {contactName(c.otherUser).trim().charAt(0)}
                                             </span>
-                                            {c.lastMessage.createdAt && <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">{fmtDay(c.lastMessage.createdAt)}</span>}
+                                            <span className="min-w-0 flex-1">
+                                                <span className="flex items-center justify-between gap-2">
+                                                    <span className={`truncate text-sm ${c.unreadCount > 0 ? 'font-black text-brand-navy dark:text-white' : 'font-bold text-brand-navy dark:text-white'}`}>{contactName(c.otherUser)}</span>
+                                                    {c.lastMessage.createdAt && (
+                                                        <span className={`shrink-0 text-[10px] ${c.unreadCount > 0 ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                                                            {fmtConversationTime(c.lastMessage.createdAt)}
+                                                        </span>
+                                                    )}
+                                                </span>
+                                                {c.course && (
+                                                    <span className="block text-[11px] text-brand-gold-dark dark:text-brand-gold-light font-bold truncate">{pick(c.course, 'title')}</span>
+                                                )}
+                                                <span className="mt-1 flex items-center justify-between gap-2">
+                                                    <span className={`truncate text-xs ${c.unreadCount > 0 ? 'font-bold text-brand-navy dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
+                                                        {c.lastMessage.fromMe && <span className="font-bold">{t('inbox.me')}: </span>}
+                                                        {c.lastMessage.content}
+                                                    </span>
+                                                    {c.unreadCount > 0 && (
+                                                        <span className="shrink-0 bg-emerald-600 text-white text-[10px] font-black rounded-full min-w-5 h-5 px-1.5 inline-flex items-center justify-center">
+                                                            {c.unreadCount}
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </span>
                                         </div>
                                     </button>
                                 ))
@@ -340,7 +399,7 @@ export default function InboxPage() {
                                     <button onClick={() => setActive(null)} className="md:hidden text-gray-500 dark:text-gray-400 hover:text-brand-navy dark:hover:text-white"><X size={20} /></button>
                                 </div>
 
-                                <div ref={threadBoxRef} className="flex-1 overflow-y-auto p-5 space-y-3 bg-gray-50/60 dark:bg-brand-navy-dark h-[40vh] md:h-[calc(60vh-130px)] admin-scroll">
+                                <div ref={threadBoxRef} className="flex-1 overflow-y-auto p-5 space-y-3 bg-gray-50/60 dark:bg-brand-navy-dark h-[40vh] md:h-[calc(70vh-130px)] admin-scroll">
                                     {loadingThread ? (
                                         <div className="flex justify-center pt-8"><Loader className="animate-spin text-brand-gold-dark dark:text-brand-gold-light" size={24} /></div>
                                     ) : thread.length === 0 ? (
@@ -491,7 +550,14 @@ export default function InboxPage() {
                                                                             </div>
                                                                         </div>
                                                                     ) : c.requestStatus === 'PENDING' ? (
-                                                                        <span className="text-xs text-gray-400">{t('inbox.request_pending')}</span>
+                                                                        <div className="flex items-center justify-between gap-2">
+                                                                            <span className="text-xs text-gray-400">{t('inbox.request_pending')}</span>
+                                                                            {c.requestDirection === 'OUTGOING' && (
+                                                                                <button onClick={() => cancelRequest(c)} className="text-xs font-bold text-red-300 hover:underline">
+                                                                                    {t('inbox.request_cancel')}
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
                                                                     ) : (
                                                                         <button onClick={() => messageRequest(c)} className="text-xs font-bold text-brand-gold-light hover:underline">
                                                                             {t('inbox.request_message')}
