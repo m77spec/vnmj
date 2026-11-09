@@ -23,7 +23,7 @@ interface Announcement {
     contentEn: string;
     isPublished: boolean;
     createdAt: string;
-    author?: { id: string; email: string } | null;
+    author?: { id: string; nameAr?: string | null; nameEn?: string | null } | null;
     openingName?: string | null;
 }
 
@@ -36,20 +36,30 @@ export default function StudentAnnouncements() {
     // which renders before the session is known. Firing it unconditionally put a
     // guaranteed 401 in the console on every visit; `useFetchData` skips a null
     // url and refetches once the token appears.
-    const { data: enrollments } = useFetchData<Enrollment[]>(token ? '/enrollments/my' : null);
+    const { data: enrollments, loading: enrollmentsLoading, error: enrollmentsError } =
+        useFetchData<Enrollment[]>(token ? '/enrollments/my' : null);
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
 
     useEffect(() => {
         let active = true;
         (async () => {
             setLoading(true);
+            setLoadError(false);
+            if (enrollmentsLoading) return;
+            if (enrollmentsError) {
+                setLoadError(true);
+                setLoading(false);
+                return;
+            }
             try {
                 const approved = (enrollments || []).filter(e => e.status === 'APPROVED' && e.opening?.id);
                 if (approved.length === 0) {
                     if (active) setAnnouncements([]);
                     return;
                 }
+                let failed = false;
                 const results = await Promise.all(
                     approved.map(async (e) => {
                         try {
@@ -59,6 +69,7 @@ export default function StudentAnnouncements() {
                                 openingName: pick(e.opening, 'name') || pick(e.course, 'title'),
                             }));
                         } catch {
+                            failed = true;
                             return [];
                         }
                     })
@@ -68,15 +79,19 @@ export default function StudentAnnouncements() {
                         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
                     );
                     setAnnouncements(flat);
+                    setLoadError(failed);
                 }
             } catch {
-                if (active) setAnnouncements([]);
+                if (active) {
+                    setAnnouncements([]);
+                    setLoadError(true);
+                }
             } finally {
                 if (active) setLoading(false);
             }
         })();
         return () => { active = false; };
-    }, [enrollments, pick]);
+    }, [enrollments, enrollmentsError, enrollmentsLoading, pick]);
 
     if (loading) {
         return (
@@ -98,9 +113,20 @@ export default function StudentAnnouncements() {
                 </div>
             </div>
 
+            {loadError && (
+                <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm font-semibold text-red-700 dark:text-red-300">
+                    {isAr ? 'تعذر تحميل بعض الإعلانات. حاول تحديث الصفحة.' : 'Some announcements could not be loaded. Please refresh the page.'}
+                </div>
+            )}
+
             {announcements.length === 0 ? (
                 <div className="bg-surface-sunken border border-line rounded-2xl p-8">
-                    <EmptyPanel icon={Megaphone} title={isAr ? 'لا توجد إعلانات' : 'No announcements yet'} />
+                    <EmptyPanel
+                        icon={Megaphone}
+                        title={loadError
+                            ? (isAr ? 'تعذر تحميل الإعلانات' : 'Could not load announcements')
+                            : (isAr ? 'لا توجد إعلانات' : 'No announcements yet')}
+                    />
                 </div>
             ) : (
                 <div className="space-y-3">
@@ -131,10 +157,10 @@ export default function StudentAnnouncements() {
                                                 year: 'numeric', month: 'short', day: 'numeric'
                                             })}
                                         </span>
-                                        {a.author && (
+                                        {a.author && (pick(a.author, 'name')) && (
                                             <span className="flex min-w-0 items-center gap-1">
                                                 <User size={10} />
-                                                <span className="min-w-0 truncate">{a.author.email}</span>
+                                                <span className="min-w-0 truncate">{pick(a.author, 'name')}</span>
                                             </span>
                                         )}
                                     </div>

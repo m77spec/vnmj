@@ -13,8 +13,11 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 interface ChatRoom {
     id: string;
     name: string;
+    nameAr?: string | null;
+    nameEn?: string | null;
+    createdAt?: string;
     openingId: string | null;
-    course?: { id: string; title: string } | null;
+    course?: { id: string; title: string; titleAr?: string | null; titleEn?: string | null } | null;
     lastMessage?: { content: string; attachmentType?: string | null; createdAt: string; fromMe: boolean } | null;
     memberCount: number;
     unreadCount?: number;
@@ -27,11 +30,11 @@ interface ChatMsg {
     attachmentType?: string | null;
     createdAt: string;
     senderId: string;
-    sender?: { id: string; email: string; role: string } | null;
+    sender?: { id: string; nameAr?: string | null; nameEn?: string | null; role: string } | null;
 }
 
 export default function BatchChatsPage() {
-    const { t } = useI18n();
+    const { t, pick } = useI18n();
     const { user } = useAuth();
     const [rooms, setRooms] = useState<ChatRoom[]>([]);
     const [loading, setLoading] = useState(true);
@@ -188,7 +191,9 @@ export default function BatchChatsPage() {
                 isMine(m) ? 'bg-gradient-to-br from-brand-gold to-brand-gold-dark text-black rounded-br-md' : 'bg-white dark:bg-brand-navy-dark border border-gray-200 dark:border-white/5 text-brand-navy dark:text-white rounded-bl-md'
             }`}>
                 {!isMine(m) && m.sender && (
-                    <div className="text-[10px] font-bold text-brand-gold-dark dark:text-brand-gold-light mb-0.5">{m.sender.email}</div>
+                            <div className="text-[10px] font-bold text-brand-gold-dark dark:text-brand-gold-light mb-0.5">
+                                {pick(m.sender, 'name') || t('courseChat.member')}
+                            </div>
                 )}
                 {m.content && <p className="whitespace-pre-wrap break-words leading-relaxed">{m.content}</p>}
                 {renderAttachment(m)}
@@ -243,9 +248,9 @@ export default function BatchChatsPage() {
                                                     <Users size={15} />
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <span className="font-bold text-brand-navy dark:text-white text-sm truncate block">{room.name}</span>
+                                                    <span className="font-bold text-brand-navy dark:text-white text-sm truncate block">{pick(room, 'name')}</span>
                                                     {room.course && (
-                                                        <span className="text-[11px] text-brand-gold-dark dark:text-brand-gold-light font-bold truncate block">{room.course.title}</span>
+                                                        <span className="text-[11px] text-brand-gold-dark dark:text-brand-gold-light font-bold truncate block">{pick(room.course, 'title')}</span>
                                                     )}
                                                 </div>
                                             </div>
@@ -295,7 +300,7 @@ export default function BatchChatsPage() {
                                     <div className="min-w-0">
                                         <p className="font-black text-brand-navy dark:text-white truncate">{activeRoom.name}</p>
                                         {activeRoom.course && (
-                                            <p className="text-xs text-brand-gold-dark dark:text-brand-gold-light font-bold truncate">{activeRoom.course.title}</p>
+                                            <p className="text-xs text-brand-gold-dark dark:text-brand-gold-light font-bold truncate">{pick(activeRoom.course, 'title')}</p>
                                         )}
                                         <p className="text-[11px] text-gray-500 dark:text-gray-400">{activeRoom.memberCount} {t('batchChats.members')}</p>
                                     </div>

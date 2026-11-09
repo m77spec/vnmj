@@ -100,10 +100,36 @@ async function main() {
         const payRe = await tx.payment.findFirstOrThrow({ where: { enrollmentId: enr1.id } });
         assert(payRe.receiptFileUrl === '/uploads/private/receipts/r2.png', 're-upload should refresh the receipt on the SAME payment');
 
-        // === 3a. Review APPROVED => Enrollment APPROVED + Payment PAID in one tx ===
+        // === 3a. Rejected receipt can be submitted again with a fresh payment ===
+        await enrollments.review(enr1.id, EnrollmentStatus.REJECTED, instructor.id, undefined, 'Please upload a clearer receipt');
+        const rejectedPayment = await tx.payment.findFirstOrThrow({
+          where: { enrollmentId: enr1.id },
+          orderBy: { createdAt: 'desc' },
+        });
+        assert(rejectedPayment.status === PaymentStatus.REJECTED, 'rejected enrollment payment should be REJECTED');
+        const openingAfterRejection = await tx.courseOpening.findUniqueOrThrow({ where: { id: opening.id } });
+        assert(openingAfterRejection.seatsTaken === 0, 'rejection should release the enrollment seat');
+
+        const retriedEnrollment = await enrollments.enrollWithReceipt(opening.id, '/uploads/private/receipts/r3.png', student.id);
+        assert(retriedEnrollment.status === EnrollmentStatus.PENDING, 'resubmitted enrollment should return to PENDING');
+        assert(retriedEnrollment.financeOfficerNotes === null, 'resubmission should clear the previous rejection note');
+        const retriedPayments = await tx.payment.findMany({
+          where: { enrollmentId: enr1.id },
+          orderBy: { createdAt: 'desc' },
+        });
+        assert(retriedPayments.length === 2, 'resubmitting after rejection should create a new payment attempt');
+        assert(retriedPayments[0].status === PaymentStatus.PENDING, 'new payment attempt should be PENDING');
+        assert(retriedPayments[0].receiptFileUrl === '/uploads/private/receipts/r3.png', 'new payment should carry the replacement receipt');
+        const openingAfterRetry = await tx.courseOpening.findUniqueOrThrow({ where: { id: opening.id } });
+        assert(openingAfterRetry.seatsTaken === 1, 'resubmission should reclaim one enrollment seat');
+
+        // === 3b. Review APPROVED => Enrollment APPROVED + Payment PAID in one tx ===
         const apr = await enrollments.review(enr1.id, EnrollmentStatus.APPROVED, instructor.id, undefined, 'looks good');
         assert(apr.status === EnrollmentStatus.APPROVED, 'enrollment should be APPROVED');
-        const payApr = await tx.payment.findFirstOrThrow({ where: { enrollmentId: enr1.id } });
+        const payApr = await tx.payment.findFirstOrThrow({
+          where: { enrollmentId: enr1.id },
+          orderBy: { createdAt: 'desc' },
+        });
         assert(payApr.status === PaymentStatus.PAID, 'approved enrollment payment should be PAID');
         assert(payApr.paidAt !== null, 'paidAt should be set on approval');
         assert(payApr.reviewedAt !== null, 'reviewedAt should be set on approval');

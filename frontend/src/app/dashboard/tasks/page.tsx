@@ -27,9 +27,15 @@ export default function TasksPage() {
     const [selectedOpeningId, setSelectedOpeningId] = useState(requestedOpeningId);
     const openings = Array.from(new Map(
         (enrollments || [])
-            .filter((enrollment) => enrollment.opening?.id && enrollment.status !== 'REJECTED')
+            .filter((enrollment) =>
+                enrollment.opening?.id
+                && ['APPROVED', 'PENDING', 'RESERVED'].includes(enrollment.status),
+            )
             .map((enrollment) => [enrollment.opening!.id, enrollment] as const),
     ).values());
+    const activeOpeningId = openings.some((enrollment) => enrollment.opening?.id === selectedOpeningId)
+        ? selectedOpeningId
+        : '';
 
     const inputCls = 'w-full px-4 py-3 bg-white dark:bg-brand-navy-dark border border-gray-300 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none transition placeholder:text-gray-400 dark:placeholder:text-gray-500 text-brand-navy dark:text-white';
 
@@ -50,7 +56,7 @@ export default function TasksPage() {
                         </label>
                         <select
                             id="task-opening"
-                            value={selectedOpeningId}
+                            value={activeOpeningId}
                             onChange={(event) => setSelectedOpeningId(event.target.value)}
                             className={inputCls}
                             disabled={loading}
@@ -76,13 +82,13 @@ export default function TasksPage() {
                         </div>
                     )}
 
-                    {!loading && !error && !selectedOpeningId && (
+                    {!loading && !error && !activeOpeningId && (
                         <div className="py-12 text-center text-gray-500 dark:text-gray-400 font-bold">
                             {openings.length ? t('tasks.pick_hint') : t('tasks.no_tasks')}
                         </div>
                     )}
 
-                    {selectedOpeningId && <StudentTasksPanel key={selectedOpeningId} openingId={selectedOpeningId} />}
+                    {activeOpeningId && <StudentTasksPanel key={activeOpeningId} openingId={activeOpeningId} />}
                 </div>
             </div>
         </ProtectedRoute>

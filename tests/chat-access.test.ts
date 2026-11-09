@@ -32,6 +32,7 @@ function makeHarness(handlers: {
     openings?: any[];
     rooms?: any[];
     roomMembers?: any[];
+    messages?: any[];
     course?: any;
     courses?: any[];
     users?: any[];
@@ -104,6 +105,7 @@ function makeHarness(handlers: {
                     && m.userId === args?.where?.roomId_userId?.userId) ?? null;
             },
             deleteMany: async () => ({ count: 0 }),
+            updateMany: async () => ({ count: 1 }),
             // `createMany` issues ONE multi-row INSERT, so `@@unique([roomId,
             // userId])` is checked within the statement. This double used to be
             // a no-op, which is exactly why the admin-taught-batch 500 went
@@ -121,6 +123,13 @@ function makeHarness(handlers: {
                     seen.add(key);
                 }
                 return { count: (args?.data ?? []).length };
+            },
+        },
+        chatMessage: {
+            count: async () => 0,
+            findMany: async (args: any) => {
+                calls.push({ model: 'chatMessage', op: 'findMany', args });
+                return handlers.messages ?? [];
             },
         },
         chatMessage: { count: async () => 0 },
@@ -174,6 +183,50 @@ function makeHarness(handlers: {
 }
 
 describe('batch chat: the room list is an allow-list, even when empty', () => {
+    test('room list sorts by latest message, returns localized names, and never selects participant emails', async () => {
+        const { service, calls } = makeHarness({
+            rooms: [
+                {
+                    id: 'older-room',
+                    openingId: 'o1',
+                    nameAr: 'دفعة أ',
+                    nameEn: 'Batch A',
+                    createdAt: new Date('2026-01-03T00:00:00.000Z'),
+                    members: [],
+                    messages: [{
+                        content: 'Older message',
+                        createdAt: new Date('2026-01-04T00:00:00.000Z'),
+                        sender: { id: 'student-1', email: 'private@example.com', role: Role.STUDENT },
+                    }],
+                    opening: { id: 'o1', course: { id: 'c1', titleAr: 'دورة أ', titleEn: 'Course A' } },
+                },
+                {
+                    id: 'newer-room',
+                    openingId: 'o2',
+                    nameAr: 'دفعة ب',
+                    nameEn: 'Batch B',
+                    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+                    members: [],
+                    messages: [{
+                        content: 'Newer message',
+                        createdAt: new Date('2026-01-05T00:00:00.000Z'),
+                        sender: { id: 'student-2', email: 'private@example.com', role: Role.STUDENT },
+                    }],
+                    opening: { id: 'o2', course: { id: 'c2', titleAr: 'دورة ب', titleEn: 'Course B' } },
+                },
+            ],
+        });
+
+        const rooms = await service.getRooms('admin-1', Role.ADMIN);
+        const query = calls.find((call) => call.model === 'chatRoom' && call.op === 'findMany');
+
+        assert.deepEqual(rooms.map((room: any) => room.id), ['newer-room', 'older-room']);
+        assert.equal(rooms[0].nameAr, 'دفعة ب');
+        assert.equal(rooms[0].course.titleAr, 'دورة ب');
+        assert.equal('sender' in rooms[0].lastMessage, false);
+        assert.equal(query?.args.include.messages.include, undefined);
+    });
+
     test('a student with no approved enrollment gets no rooms, not every room', async () => {
         const { service, calls } = makeHarness({
             enrollments: [],

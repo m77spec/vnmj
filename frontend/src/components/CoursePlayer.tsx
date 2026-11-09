@@ -132,7 +132,7 @@ interface Announcement {
     contentEn: string;
     isPublished: boolean;
     createdAt: string;
-    author?: { id: string; email: string } | null;
+    author?: { id: string; nameAr?: string | null; nameEn?: string | null } | null;
 }
 
 interface ModuleQuiz {
@@ -234,11 +234,9 @@ export default function CoursePlayer({ courseId }: Props) {
             setLoading(true);
             setLoadError(null);
             try {
-                const [c, p, n, e] = await Promise.all([
+                const [c, p] = await Promise.all([
                     api.get(`/courses/${courseId}`),
                     api.get(`/lms/courses/${courseId}/my-progress`),
-                    api.get(`/lms/courses/${courseId}/my-notes`),
-                    api.get(`/course-evaluations/my/${courseId}`),
                 ]);
                 if (!active) return;
                 const baseCourse = c.data as CourseData;
@@ -258,13 +256,30 @@ export default function CoursePlayer({ courseId }: Props) {
                         : [],
                 });
                 setProgress(incoming as ProgressData);
-                setEvaluation(e.data as EvaluationStatus);
+                const [notesResult, evaluationResult] = await Promise.allSettled([
+                    api.get(`/lms/courses/${courseId}/my-notes`),
+                    api.get(`/course-evaluations/my/${courseId}`),
+                ]);
+                if (!active) return;
+                if (notesResult.status === 'fulfilled') {
+                    setNotesData(notesResult.value.data as NotesData);
+                } else {
+                    setNotesData(null);
+                    toast.error(t('player.optional_data_failed'));
+                    console.error('Failed to load course notes', notesResult.reason);
+                }
+                if (evaluationResult.status === 'fulfilled') {
+                    setEvaluation(evaluationResult.value.data as EvaluationStatus);
+                } else {
+                    setEvaluation(null);
+                    toast.error(t('player.optional_data_failed'));
+                    console.error('Failed to load course evaluation', evaluationResult.reason);
+                }
                 // A live course opens on its schedule: the meeting times are what
                 // the student came for, and the lesson list below has no video.
                 if (incoming && (incoming.contentType ?? 'LIVE') !== 'RECORDED' && (incoming.liveSessions?.length ?? 0) > 0) {
                     setDeckTab('sessions');
                 }
-                setNotesData(n.data as NotesData);
                 // Course-scoped: the server resolves the student's batch, so an
                 // enrollment that never recorded an opening still sees the work
                 // instead of an empty lesson. The course is what we have here, not
@@ -978,10 +993,10 @@ export default function CoursePlayer({ courseId }: Props) {
                                                             <Calendar size={10} />
                                                             {new Date(a.createdAt).toLocaleDateString()}
                                                         </span>
-                                                        {a.author && (
+                                                        {a.author && pick(a.author, 'name') && (
                                                             <span className="flex items-center gap-1 min-w-0">
                                                                 <User size={10} className="shrink-0" />
-                                                                <span className="truncate">{a.author.email}</span>
+                                                                <span className="truncate">{pick(a.author, 'name')}</span>
                                                             </span>
                                                         )}
                                                     </div>

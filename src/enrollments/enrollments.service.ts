@@ -490,7 +490,26 @@ export class EnrollmentsService {
             });
 
             if (existing) {
-                if (existing.status === 'RESERVED' || existing.status === 'PENDING') {
+                if (existing.status === EnrollmentStatus.REJECTED) {
+                    // Rejected registrations no longer hold a seat. Reclaim
+                    // one before allowing the student to submit a new receipt.
+                    await claimSeat(tx, openingId);
+                    const retried = await tx.enrollment.updateMany({
+                        where: { id: existing.id, status: EnrollmentStatus.REJECTED },
+                        data: {
+                            openingId,
+                            receiptFileUrl: receiptUrl,
+                            status: EnrollmentStatus.PENDING,
+                            financeOfficerNotes: null,
+                            reviewedAt: null,
+                            reviewedById: null,
+                        },
+                    });
+                    if (retried.count !== 1) {
+                        throw new ConflictException('Enrollment status changed. Please refresh and try again');
+                    }
+                    existing = await tx.enrollment.findUniqueOrThrow({ where: { id: existing.id } });
+                } else if (existing.status === EnrollmentStatus.RESERVED || existing.status === EnrollmentStatus.PENDING) {
                     existing = await tx.enrollment.update({
                         where: { id: existing.id },
                         data: { openingId, receiptFileUrl: receiptUrl, status: EnrollmentStatus.PENDING }

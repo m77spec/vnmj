@@ -16,6 +16,7 @@ import {
     ClipboardCheck,
     MessagesSquare,
     CalendarClock,
+    CalendarDays,
     BadgeCheck,
     PenLine,
     Route,
@@ -68,7 +69,7 @@ export function groupStudentNavLinks(
         },
         {
             title: t('sidebar.nav_learning'),
-            hrefs: ['/dashboard/explore', '/dashboard/my-courses', '/dashboard/my-grades', '/dashboard/tasks'],
+            hrefs: ['/dashboard/explore', '/dashboard/my-courses', '/dashboard/my-grades', '/dashboard/tasks', '/dashboard/calendar'],
         },
         {
             title: t('sidebar.nav_communication'),
@@ -195,6 +196,7 @@ export function buildNavLinks(t: (key: string) => string): NavLink[] {
         { name: t('sidebar.my_courses'), href: '/dashboard/my-courses', icon: BookOpen, roles: ['STUDENT'] },
         { name: t('sidebar.my_grades'), href: '/dashboard/my-grades', icon: GraduationCap, roles: ['STUDENT'] },
         { name: t('sidebar.tasks'), href: '/dashboard/tasks', icon: ClipboardList, roles: ['STUDENT'] },
+        { name: t('sidebar.calendar'), href: '/dashboard/calendar', icon: CalendarDays, roles: ['STUDENT'] },
         { name: t('sidebar.payments'), href: '/dashboard/payments', icon: Wallet, roles: ['STUDENT'] },
         { name: t('sidebar.refunds'), href: '/dashboard/refunds', icon: RotateCcw, roles: ['STUDENT'] },
         { name: t('sidebar.certificates'), href: '/dashboard/profile?tab=certificates', icon: Award, roles: ['STUDENT'] },

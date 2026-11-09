@@ -37,7 +37,7 @@ export class CalendarService {
 
     async listMyEvents(userId: string) {
         const enrollments = await this.prisma.enrollment.findMany({
-            where: { studentId: userId, status: { in: ['APPROVED', 'PENDING'] } },
+            where: { studentId: userId, status: { in: ['APPROVED', 'PENDING', 'RESERVED'] } },
             select: { openingId: true },
         });
         const openingIds = enrollments.map(e => e.openingId).filter((id): id is string => id !== null);

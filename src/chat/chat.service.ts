@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, ForbiddenException 
 import { PrismaService } from '../prisma/prisma.service';
 import { Role } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { getUserDisplayNames } from '../common/user-display-name';
 
 @Injectable()
 export class ChatService {
@@ -125,7 +126,6 @@ export class ChatService {
                 messages: {
                     take: 1,
                     orderBy: { createdAt: 'desc' },
-                    include: { sender: { select: { id: true, email: true, role: true } } },
                 },
             },
             orderBy: { createdAt: 'desc' },
@@ -141,12 +141,20 @@ export class ChatService {
                 });
             }
             const course = room.opening?.course
-                ? { id: room.opening.course.id, title: room.opening.course.titleEn || room.opening.course.titleAr }
+                ? {
+                      id: room.opening.course.id,
+                      title: room.opening.course.titleEn || room.opening.course.titleAr,
+                      titleAr: room.opening.course.titleAr,
+                      titleEn: room.opening.course.titleEn,
+                  }
                 : null;
             const lastMessage = room.messages?.[0];
             result.push({
                 id: room.id,
                 name: room.nameEn || room.nameAr || `Room ${room.id}`,
+                nameAr: room.nameAr,
+                nameEn: room.nameEn,
+                createdAt: room.createdAt,
                 openingId: room.openingId,
                 course,
                 lastMessage: lastMessage
@@ -160,7 +168,10 @@ export class ChatService {
                 memberCount: room.members?.length ?? 0,
             });
         }
-        return result;
+        return result.sort((a, b) =>
+            new Date(b.lastMessage?.createdAt ?? b.createdAt ?? 0).getTime()
+            - new Date(a.lastMessage?.createdAt ?? a.createdAt ?? 0).getTime(),
+        );
     }
 
     /** Get the room for an opening, creating + syncing it on first access. */
@@ -190,7 +201,7 @@ export class ChatService {
         }
         const messages = await this.prisma.chatMessage.findMany({
             where: { roomId },
-            include: { sender: { select: { id: true, email: true, role: true } } },
+            include: { sender: { select: { id: true, role: true, metadata: true } } },
             orderBy: { createdAt: 'desc' },
             take,
         });
@@ -201,7 +212,9 @@ export class ChatService {
         });
         return messages.map((m: any) => ({
             ...m,
-            content: m.content,
+            sender: m.sender
+                ? { id: m.sender.id, role: m.sender.role, ...getUserDisplayNames(m.sender) }
+                : null,
         }));
     }
 
@@ -226,7 +239,7 @@ export class ChatService {
                 attachmentType,
                 senderId: userId,
             },
-            include: { sender: { select: { id: true, email: true, role: true } } },
+            include: { sender: { select: { id: true, role: true, metadata: true } } },
         });
 
         // Notify every other member (except sender) via in-app notification
@@ -247,7 +260,12 @@ export class ChatService {
             })));
         }
 
-        return message;
+        return {
+            ...message,
+            sender: message.sender
+                ? { id: message.sender.id, role: message.sender.role, ...getUserDisplayNames(message.sender) }
+                : null,
+        };
     }
 
     /**

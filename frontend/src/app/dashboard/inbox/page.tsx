@@ -98,9 +98,9 @@ export default function InboxPage() {
         return () => { active = false; clearInterval(timer); };
     }, []);
 
-    const openThread = useCallback(async (conv: Conv, markRead: boolean) => {
+    const openThread = useCallback(async (conv: Conv, markRead: boolean, silent = false) => {
         setActive(conv);
-        setLoadingThread(true);
+        if (!silent) setLoadingThread(true);
         const params = new URLSearchParams({ with: conv.otherUser.id });
         if (conv.course) params.set('courseId', conv.course.id);
         if (conv.opening?.id) params.set('openingId', conv.opening.id);
@@ -112,14 +112,15 @@ export default function InboxPage() {
                 loadConversations();
             }
         } catch (err) {
-            toast.error(getErrorMessage(err) || t('inbox.message_fail'));
+            if (!silent) toast.error(getErrorMessage(err) || t('inbox.message_fail'));
+        } finally {
+            if (!silent) setLoadingThread(false);
         }
-        setLoadingThread(false);
     }, [loadConversations, t]);
 
     useEffect(() => {
         if (!active) return;
-        const timer = setInterval(() => { openThread(active, false); }, 10000);
+        const timer = setInterval(() => { openThread(active, false, true); }, 10000);
         return () => clearInterval(timer);
     }, [active, openThread]);
 

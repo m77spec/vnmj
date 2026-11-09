@@ -4,6 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import { Role } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CoursesService } from '../courses/courses.service';
+import { getUserDisplayNames } from '../common/user-display-name';
 
 @Injectable()
 export class AnnouncementsService {
@@ -71,9 +72,17 @@ export class AnnouncementsService {
             where,
             orderBy: { createdAt: 'desc' },
             include: {
-                author: { select: { id: true, email: true } },
+                author: { select: { id: true, email: true, role: true, metadata: true } },
             },
         });
+        if (isStudent) {
+            return announcements.map((announcement) => ({
+                ...announcement,
+                author: announcement.author
+                    ? { id: announcement.author.id, ...getUserDisplayNames(announcement.author) }
+                    : null,
+            }));
+        }
         return announcements;
     }
 
@@ -81,7 +90,7 @@ export class AnnouncementsService {
         const announcement = await this.prisma.announcement.findUnique({
             where: { id: announcementId },
             include: {
-                author: { select: { id: true, email: true } },
+                author: { select: { id: true, email: true, role: true, metadata: true } },
                 opening: { select: { id: true, instructorId: true } },
             },
         });
@@ -101,6 +110,14 @@ export class AnnouncementsService {
             throw new NotFoundException('Announcement not found');
         }
 
+        if (isStudent) {
+            return {
+                ...announcement,
+                author: announcement.author
+                    ? { id: announcement.author.id, ...getUserDisplayNames(announcement.author) }
+                    : null,
+            };
+        }
         return announcement;
     }
 

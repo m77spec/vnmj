@@ -13,6 +13,8 @@ type ChatMode = 'group' | 'direct';
 interface ChatRoom {
     id: string;
     name: string;
+    nameAr?: string | null;
+    nameEn?: string | null;
     openingId: string | null;
     course?: { id: string; title: string } | null;
     lastMessage?: { content: string; createdAt: string; fromMe: boolean } | null;
@@ -37,7 +39,13 @@ interface ChatMsg {
     attachmentType?: string | null;
     createdAt: string;
     senderId: string;
-    sender?: { id: string; email: string; role: string } | null;
+    sender?: {
+        id: string;
+        email?: string;
+        nameAr?: string | null;
+        nameEn?: string | null;
+        role: string;
+    } | null;
 }
 
 interface CourseChatProps {
@@ -46,7 +54,7 @@ interface CourseChatProps {
 }
 
 export default function CourseChat({ courseId, variant }: CourseChatProps) {
-    const { t } = useI18n();
+    const { t, pick } = useI18n();
     const { user } = useAuth();
     const [mode, setMode] = useState<ChatMode>(variant ?? 'group');
     const [rooms, setRooms] = useState<ChatRoom[] | null>(null);
@@ -296,7 +304,11 @@ export default function CourseChat({ courseId, variant }: CourseChatProps) {
                 isMine(m) ? 'bg-surface text-ink rounded-br-md' : 'bg-surface-raised border border-brand-mist text-ink-muted rounded-bl-md'
             }`}>
                 {!isMine(m) && (
-                    <div className="text-[10px] font-bold text-accent mb-0.5">{m.sender?.email ?? ''}</div>
+                    <div className="text-[10px] font-bold text-accent mb-0.5">
+                        {mode === 'group'
+                            ? (m.sender ? pick(m.sender, 'name') : undefined) || t('courseChat.member')
+                            : (m.sender?.email || (m.sender ? pick(m.sender, 'name') : undefined) || '')}
+                    </div>
                 )}
                 {m.content && <p className="whitespace-pre-wrap break-words leading-relaxed">{m.content}</p>}
                 {renderAttachment(m)}
@@ -620,7 +632,7 @@ export default function CourseChat({ courseId, variant }: CourseChatProps) {
                                         }`}
                                     >
                                         <div className="font-bold text-sm flex items-center gap-2">
-                                            <span className="truncate">{room.name}</span>
+                                            <span className="truncate">{pick(room, 'name')}</span>
                                             {(room.unreadCount ?? 0) > 0 && (
                                                 <span className={`ml-auto min-w-[20px] px-1.5 py-0.5 rounded-full text-[10px] font-bold text-center ${
                                                     activeRoomId === room.id ? 'bg-brand-gold text-ink-on-gold' : 'bg-brand-gold text-ink-on-gold'
