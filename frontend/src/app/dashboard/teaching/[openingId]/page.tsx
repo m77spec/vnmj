@@ -47,6 +47,10 @@ interface ModuleData {
     id: string;
     titleAr?: string | null;
     titleEn?: string | null;
+    chapterId?: string | null;
+    chapterOrderIndex?: number | null;
+    orderIndex?: number | null;
+    createdAt?: string;
     descriptionAr?: string | null;
     descriptionEn?: string | null;
     videoUrl?: string | null;
@@ -69,7 +73,14 @@ interface InstructorAnalyticsData {
 }
 
 interface SyllabusData {
-    chapters?: { titleAr?: string | null; titleEn?: string | null; modules?: ModuleData[] | null }[] | null;
+    chapters?: {
+        id: string;
+        titleAr?: string | null;
+        titleEn?: string | null;
+        orderIndex?: number | null;
+        createdAt?: string;
+        modules?: ModuleData[] | null;
+    }[] | null;
 }
 
 type Tab = 'roster' | 'tasks' | 'announcements' | 'calendar' | 'sessions' | 'content' | 'quizzes' | 'chat' | 'analytics';
@@ -145,8 +156,34 @@ export default function TeachingWorkspacePage() {
         opening?.access.canReadContent ? `/lms/courses/${opening.course.id}/syllabus` : null,
     );
     const quizLessons = useMemo(() => {
-        const all = [...(modulesData || []), ...(syllabusData?.chapters || []).flatMap((chapter) => chapter.modules || [])];
-        return [...new Map(all.map((module) => [module.id, module])).values()];
+        const chapters = [...(syllabusData?.chapters || [])].sort(
+            (left, right) => (left.orderIndex ?? 0) - (right.orderIndex ?? 0)
+                || (left.createdAt || '').localeCompare(right.createdAt || '')
+                || left.id.localeCompare(right.id),
+        );
+        const chapterOrder = new Map(chapters.map((chapter, index) => [chapter.id, index + 1]));
+        const uniqueLessons = new Map<string, ModuleData>();
+        const sourceLessons = modulesData
+            ?? chapters.flatMap((chapter) => chapter.modules || []);
+
+        for (const lesson of sourceLessons) {
+            const chapterIndex = lesson.chapterId ? chapterOrder.get(lesson.chapterId) : undefined;
+            uniqueLessons.set(lesson.id, {
+                ...uniqueLessons.get(lesson.id),
+                ...lesson,
+                chapterOrderIndex: chapterIndex ?? lesson.chapterOrderIndex ?? null,
+            });
+        }
+
+        return [...uniqueLessons.values()].sort((left, right) => {
+            const leftChapter = left.chapterOrderIndex ?? 0;
+            const rightChapter = right.chapterOrderIndex ?? 0;
+            return leftChapter - rightChapter
+                || (left.orderIndex ?? 0) - (right.orderIndex ?? 0)
+                || (left.createdAt || '').localeCompare(right.createdAt || '')
+                || (left.titleAr || left.titleEn || '').localeCompare(right.titleAr || right.titleEn || '')
+                || left.id.localeCompare(right.id);
+        });
     }, [modulesData, syllabusData]);
 
     const studentCount = rosterData?.enrollments?.length;

@@ -41,6 +41,9 @@ interface Lesson {
     id: string;
     titleAr?: string | null;
     titleEn?: string | null;
+    chapterOrderIndex?: number | null;
+    orderIndex?: number | null;
+    createdAt?: string;
 }
 
 interface Props {
@@ -73,10 +76,21 @@ export default function InstructorQuizManager({ openingId, courseId, lessons }: 
     const [editingId, setEditingId] = useState<string | null>(null);
     const [draft, setDraft] = useState<CourseQuiz | null>(null);
     const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
-    const lessonNames = useMemo(() => new Map(lessons.map((lesson) => [
+    const orderedLessons = useMemo(() => {
+        const unique = new Map<string, Lesson>();
+        lessons.forEach((lesson) => unique.set(lesson.id, lesson));
+        return [...unique.values()].sort((left, right) =>
+            (left.chapterOrderIndex ?? 0) - (right.chapterOrderIndex ?? 0)
+            || (left.orderIndex ?? 0) - (right.orderIndex ?? 0)
+            || (left.createdAt || '').localeCompare(right.createdAt || '')
+            || (left.titleAr || left.titleEn || '').localeCompare(right.titleAr || right.titleEn || '')
+            || left.id.localeCompare(right.id),
+        );
+    }, [lessons]);
+    const lessonNames = useMemo(() => new Map(orderedLessons.map((lesson, index) => [
         lesson.id,
-        (isAr ? lesson.titleAr : lesson.titleEn) || lesson.titleAr || lesson.titleEn || (isAr ? 'درس' : 'Lesson'),
-    ])), [isAr, lessons]);
+        `${index + 1}. ${(isAr ? lesson.titleAr : lesson.titleEn) || lesson.titleAr || lesson.titleEn || (isAr ? 'درس' : 'Lesson')}`,
+    ])), [isAr, orderedLessons]);
 
     const refresh = useCallback(async () => {
         setLoading(true);
@@ -114,7 +128,7 @@ export default function InstructorQuizManager({ openingId, courseId, lessons }: 
             titleEn: '',
             descriptionAr: '',
             descriptionEn: '',
-            moduleId: lessons[0]?.id ?? '',
+            moduleId: orderedLessons[0]?.id ?? '',
             isFinal: false,
             isPublished: false,
             passScore: 60,
@@ -184,7 +198,7 @@ export default function InstructorQuizManager({ openingId, courseId, lessons }: 
     const save = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!draft) return;
-        if (!draft.isFinal && (!draft.moduleId || !lessons.some((lesson) => lesson.id === draft.moduleId))) {
+        if (!draft.isFinal && (!draft.moduleId || !orderedLessons.some((lesson) => lesson.id === draft.moduleId))) {
             setNotice({ text: isAr ? 'اختر الدرس المرتبط بالاختبار.' : 'Select the lesson for this quiz.', error: true });
             return;
         }
@@ -305,7 +319,7 @@ export default function InstructorQuizManager({ openingId, courseId, lessons }: 
 
                     <div className="grid gap-3 sm:grid-cols-3">
                         <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('نوع الاختبار', 'Quiz type')}
-                            <select className={inputClass} value={draft.isFinal ? 'final' : 'lesson'} onChange={(event) => setDraft({ ...draft, isFinal: event.target.value === 'final', moduleId: event.target.value === 'final' ? '' : (draft.moduleId || lessons[0]?.id || '') })}>
+                            <select className={inputClass} value={draft.isFinal ? 'final' : 'lesson'} onChange={(event) => setDraft({ ...draft, isFinal: event.target.value === 'final', moduleId: event.target.value === 'final' ? '' : (draft.moduleId || orderedLessons[0]?.id || '') })}>
                                 <option value="lesson">{text('اختبار درس', 'Lesson quiz')}</option>
                                 <option value="final">{text('اختبار نهائي للدورة', 'Course final exam')}</option>
                             </select>
@@ -314,7 +328,7 @@ export default function InstructorQuizManager({ openingId, courseId, lessons }: 
                             <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('الدرس', 'Lesson')}
                                 <select className={inputClass} value={draft.moduleId || ''} onChange={(event) => setDraft({ ...draft, moduleId: event.target.value })} required>
                                     <option value="">{text('اختر درسًا', 'Choose a lesson')}</option>
-                                    {lessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lessonNames.get(lesson.id)}</option>)}
+                                    {orderedLessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lessonNames.get(lesson.id)}</option>)}
                                 </select>
                             </label>
                         )}
