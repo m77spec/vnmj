@@ -161,7 +161,7 @@ function CompleteGoogleProfile() {
                             <span className={labelClass}>{t('auth.phone')}</span>
                             <span className="relative block">
                                 <Phone className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                <input type="tel" maxLength={32} autoComplete="tel" dir="ltr" className={`${inputClass} ps-11`} value={form.phone} onChange={(event) => update('phone', event.target.value)} />
+                                <input type="tel" maxLength={32} autoComplete="tel" dir="ltr" className={`${inputClass} ps-11`} placeholder={t('auth.phone_ph')} value={form.phone} onChange={(event) => update('phone', event.target.value)} />
                             </span>
                         </label>
 

@@ -127,7 +127,7 @@ export default function ContactContent() {
                                     maxLength={contactMethod === 'email' ? 254 : 30}
                                     required
                                     dir="ltr"
-                                    placeholder={contactMethod === 'email' ? 'you@example.com' : isAr ? '+966 5X XXX XXXX' : '+1 555 123 4567'}
+                                    placeholder={contactMethod === 'email' ? 'you@example.com' : t('auth.phone_ph')}
                                 />
                             </div>
                         </div>

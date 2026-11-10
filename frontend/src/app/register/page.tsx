@@ -141,7 +141,7 @@ function RegisterForm() {
                                     type="tel"
                                     required
                                     className={`${inputCls} text-left`}
-                                    placeholder="+1 234 567 890"
+                                    placeholder={t('auth.phone_ph')}
                                     dir="ltr"
                                     value={formData.phone}
                                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}

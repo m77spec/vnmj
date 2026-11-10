@@ -1177,6 +1177,7 @@ function ProfileContent() {
                                         onChange={(e) => setForm({ ...form, phone: e.target.value })}
                                         className={inputCls}
                                         dir="ltr"
+                                        placeholder={t('auth.phone_ph')}
                                     />
                                 </div>
                                 <div>
