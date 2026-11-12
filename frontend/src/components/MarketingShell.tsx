@@ -119,7 +119,9 @@ export default function MarketingShell({ children, title, subtitle }: { children
                             <Link href="/faq" className={footerLinkCls}>{isAr ? 'الأسئلة الشائعة' : 'FAQ'}</Link>
                             <Link href="/contact" className={footerLinkCls}>{isAr ? 'تواصل معنا' : 'Contact Us'}</Link>
                             <Link href="/courses" className={footerLinkCls}>{isAr ? 'تصفح الدورات' : 'Browse Courses'}</Link>
-                            <Link href="/join-as-instructor" className={footerLinkCls}>{isAr ? 'انضم كمدرّب' : 'Join as an Instructor'}</Link>
+                            {user?.role !== 'INSTRUCTOR' && (
+                                <Link href="/join-as-instructor" className={footerLinkCls}>{isAr ? 'انضم كمدرّب' : 'Join as an Instructor'}</Link>
+                            )}
                         </nav>
                     </div>
                     <div>

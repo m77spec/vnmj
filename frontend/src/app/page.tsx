@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Award, Shield, Users, GraduationCap, ChevronRight, Sparkles, PlayCircle, Play, Camera, Send, Hash, Globe, Mail, Clock, Target, MapPin, Route, Phone, MessageCircle } from 'lucide-react';
 import { useI18n } from '@/lib/i18n-context';
 import { useTheme } from '@/lib/theme-context';
+import { useAuth } from '@/lib/auth-context';
 import { useFetchData } from '@/lib/useFetchData';
 import { formatNumber } from '@/lib/format';
 import AnnouncementBanner from '@/components/AnnouncementBanner';
@@ -24,6 +25,7 @@ interface HomeLearningPath {
 export default function Home() {
   const { t, pick, locale } = useI18n();
   const { dark } = useTheme();
+  const { user } = useAuth();
   const isAr = locale === 'ar';
   const [homepageConfig, setHomepageConfig] = useState<HomepageConfig>(DEFAULT_HOMEPAGE_CONFIG);
   const [isPreview, setIsPreview] = useState(false);
@@ -158,10 +160,12 @@ export default function Home() {
               {text('hero_explore')}
               <ChevronRight className="rtl:rotate-180 transition-transform group-hover:translate-x-1 rtl:group-hover:-translate-x-1" />
             </Link>
-            <Link href="/join-as-instructor" className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-7 py-3.5 text-base font-bold transition-all duration-300 hover:shadow-lg sm:text-lg ${joinBtnCls}`}>
-              <GraduationCap size={22} />
-              {text('hero_instructor')}
-            </Link>
+            {user?.role !== 'INSTRUCTOR' && (
+              <Link href="/join-as-instructor" className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-7 py-3.5 text-base font-bold transition-all duration-300 hover:shadow-lg sm:text-lg ${joinBtnCls}`}>
+                <GraduationCap size={22} />
+                {text('hero_instructor')}
+              </Link>
+            )}
           </div>
 
           <div className={`flex flex-wrap items-center justify-center gap-x-6 gap-y-3 pt-2 text-xs font-semibold sm:text-sm ${dark ? 'text-brand-mist' : 'text-gray-600'}`}>

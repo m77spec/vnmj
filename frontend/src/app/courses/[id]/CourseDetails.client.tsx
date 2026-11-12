@@ -534,9 +534,11 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                     <button onClick={() => router.push('/courses')} className="font-bold text-ink-on-navy-muted hover:text-ink-on-navy transition cursor-pointer">
                         {t('landing.explore_courses')}
                     </button>
-                    <button onClick={() => router.push('/join-as-instructor')} className="font-bold text-ink-on-navy-muted hover:text-ink-on-navy transition cursor-pointer">
-                        {t('landing.join_as_instructor')}
-                    </button>
+                    {user?.role !== 'INSTRUCTOR' && (
+                        <button onClick={() => router.push('/join-as-instructor')} className="font-bold text-ink-on-navy-muted hover:text-ink-on-navy transition cursor-pointer">
+                            {t('landing.join_as_instructor')}
+                        </button>
+                    )}
                 </nav>
                 <div className="flex items-center gap-4">
                     {/* This header is dark in both themes, so the burger follows

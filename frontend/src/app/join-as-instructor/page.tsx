@@ -14,7 +14,7 @@ export default function JoinAsInstructorPage() {
     const router = useRouter();
     const { t, locale } = useI18n();
     const { dark } = useTheme();
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, user } = useAuth();
     const isAr = locale === 'ar';
     const [formData, setFormData] = useState({ name: '', bio: '', specialty: '', videoIntroUrl: '' });
     const [cvFile, setCvFile] = useState<File | null>(null);
@@ -25,7 +25,13 @@ export default function JoinAsInstructorPage() {
     const [accountEmail, setAccountEmail] = useState('');
 
     useEffect(() => {
-        if (!isAuthenticated) return;
+        if (user?.role === 'INSTRUCTOR') {
+            router.replace('/dashboard');
+        }
+    }, [router, user?.role]);
+
+    useEffect(() => {
+        if (!isAuthenticated || user?.role === 'INSTRUCTOR') return;
 
         let active = true;
         const loadProfile = async () => {
@@ -54,7 +60,7 @@ export default function JoinAsInstructorPage() {
 
         void loadProfile();
         return () => { active = false; };
-    }, [isAuthenticated, t]);
+    }, [isAuthenticated, t, user?.role]);
 
     const inputCls = dark
         ? 'w-full border border-white/10 bg-white/5 hover:bg-white/10 rounded-xl p-4 focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none transition-all text-white [color-scheme:dark]'
@@ -118,6 +124,16 @@ export default function JoinAsInstructorPage() {
                             {t('joinInstructor.go_dashboard')}
                         </button>
                     </div>
+                </div>
+            </MarketingShell>
+        );
+    }
+
+    if (user?.role === 'INSTRUCTOR') {
+        return (
+            <MarketingShell>
+                <div className={`flex min-h-64 items-center justify-center font-bold ${dark ? 'text-gray-300' : 'text-gray-600'}`}>
+                    {t('common.loading')}
                 </div>
             </MarketingShell>
         );

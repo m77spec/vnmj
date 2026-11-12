@@ -6,6 +6,7 @@ import { useI18n } from '@/lib/i18n-context';
 import { useTheme } from '@/lib/theme-context';
 import MarketingShell from '@/components/MarketingShell';
 import { useFetchData } from '@/lib/useFetchData';
+import { useAuth } from '@/lib/auth-context';
 import { API_BASE_URL } from '@/lib/api';
 import { formatNumber, formatDate } from '@/lib/format';
 import type { PublicInstructorCard } from '@/lib/public-instructor';
@@ -20,6 +21,7 @@ interface PublicInstructor extends PublicInstructorCard {
 export default function InstructorsContent() {
     const { locale, t, pick } = useI18n();
     const { dark } = useTheme();
+    const { user } = useAuth();
     const { data: instructors, loading, error } = useFetchData<PublicInstructor[]>('/public/instructors');
 
     const card = (dark_: boolean) =>
@@ -123,6 +125,7 @@ export default function InstructorsContent() {
                 </div>
             )}
 
+            {user?.role !== 'INSTRUCTOR' && (
             <div className={`mt-12 rounded-3xl border p-8 text-center ${dark ? 'bg-white/5 border-white/10' : 'bg-brand-mist/40 border-gray-200'}`}>
                 <h2 className={`text-xl font-black mb-2 ${title(dark)}`}>
                     {t('instructorProfile.cta_title')}
@@ -134,6 +137,7 @@ export default function InstructorsContent() {
                     <GraduationCap size={18} /> {t('instructorProfile.cta_button')}
                 </Link>
             </div>
+            )}
         </MarketingShell>
     );
 }

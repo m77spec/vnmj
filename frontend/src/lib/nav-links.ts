@@ -59,7 +59,10 @@ export function buildPublicNavLinks(t: (key: string) => string): NavLink[] {
 }
 
 export function buildAuthenticatedPublicNavLinks(t: (key: string) => string, role: string): NavLink[] {
-    return buildPublicNavLinks(t).filter((link) => !(role === 'STUDENT' && link.href === '/courses'));
+    return buildPublicNavLinks(t).filter((link) => (
+        !(role === 'STUDENT' && link.href === '/courses')
+        && !(role === 'INSTRUCTOR' && link.href === '/join-as-instructor')
+    ));
 }
 
 export function isNavLinkActive(pathname: string, link: NavLink, links: NavLink[]) {
