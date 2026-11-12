@@ -165,8 +165,24 @@ export default function TeachingWorkspacePage() {
         const uniqueLessons = new Map<string, ModuleData>();
         const sourceLessons = modulesData
             ?? chapters.flatMap((chapter) => chapter.modules || []);
+        const lessonKey = (lesson: ModuleData) => [
+            lesson.orderIndex ?? 0,
+            (lesson.titleAr || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase(),
+            (lesson.titleEn || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase(),
+        ].join('|');
+        const chapterLessonKeys = new Set(
+            sourceLessons.filter((lesson) => lesson.chapterId).map(lessonKey),
+        );
+        const seenLessonKeys = new Set<string>();
 
         for (const lesson of sourceLessons) {
+            const key = lessonKey(lesson);
+            // Replacing a course's chapters can leave the old chapter lessons
+            // detached while creating their replacements under the new chapters.
+            if (!lesson.chapterId && chapterLessonKeys.has(key)) continue;
+            const structuralKey = `${lesson.chapterId || 'root'}|${key}`;
+            if (seenLessonKeys.has(structuralKey)) continue;
+            seenLessonKeys.add(structuralKey);
             const chapterIndex = lesson.chapterId ? chapterOrder.get(lesson.chapterId) : undefined;
             uniqueLessons.set(lesson.id, {
                 ...uniqueLessons.get(lesson.id),
