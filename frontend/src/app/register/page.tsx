@@ -12,6 +12,7 @@ import { useTheme } from '@/lib/theme-context';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import SelectField from '@/components/SelectField';
 import { useAuth } from '@/lib/auth-context';
+import { getPostAuthRedirect } from '@/lib/auth-redirect';
 
 export default function RegisterPage() {
     return (
@@ -25,7 +26,7 @@ function RegisterForm() {
     const router = useRouter();
     // Carried from the login prompt so a visitor who registers from a course
     // page still lands back on that course after they sign in.
-    const redirect = useSearchParams()?.get('redirect') || '/dashboard';
+    const redirect = getPostAuthRedirect(useSearchParams()?.get('redirect'));
     const { t } = useI18n();
     const { dark } = useTheme();
     const { isAuthenticated } = useAuth();

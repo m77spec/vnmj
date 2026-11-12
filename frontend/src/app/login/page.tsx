@@ -9,6 +9,7 @@ import { useI18n } from '@/lib/i18n-context';
 import { useTheme } from '@/lib/theme-context';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { Home } from 'lucide-react';
+import { clearPostAuthRedirect, getPostAuthRedirect } from '@/lib/auth-redirect';
 
 // Each application surface accepts only its own account roles.
 const APP_MODE = (process.env.NEXT_PUBLIC_APP_MODE || 'learner') === 'admin' ? 'admin' : 'learner';
@@ -45,7 +46,7 @@ function LoginForm() {
     const router = useRouter();
     const { t } = useI18n();
     const { dark } = useTheme();
-    const redirect = searchParams?.get('redirect') || '/dashboard';
+    const redirect = getPostAuthRedirect(searchParams?.get('redirect'));
 
     useEffect(() => {
         if (isAuthenticated) router.replace('/dashboard');
@@ -105,6 +106,7 @@ function LoginForm() {
                 role: payload.role as Role
             }, refreshToken);
 
+            clearPostAuthRedirect();
             router.push(redirect);
         } catch (err) {
             const message = getErrorMessage(err);

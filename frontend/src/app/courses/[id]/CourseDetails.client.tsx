@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { startTransition, useEffect, useRef, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api, API_BASE_URL, getErrorMessage, isUnauthorized } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -140,6 +140,7 @@ const SectionTitle = ({ icon, children }: { icon: React.ReactNode; children: Rea
 export default function CourseDetailsPage({ initialCourse }: { initialCourse?: Course | null }) {
     const { id } = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { user } = useAuth();
     const { t, locale, pick } = useI18n();
     const { dark } = useTheme();
@@ -166,6 +167,8 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
     const [openFaq, setOpenFaq] = useState<number | null>(null);
     const [selectedOpening, setSelectedOpening] = useState<Opening | null>(null);
     const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+    const [loginRedirectTo, setLoginRedirectTo] = useState<string>(`/courses/${id}`);
+    const handledIntent = useRef<string | null>(null);
     const [couponCode, setCouponCode] = useState('');
     const [coupon, setCoupon] = useState<{ name: string; amountOff: number; finalAmount: number } | null>(null);
     const [couponChecking, setCouponChecking] = useState(false);
@@ -311,6 +314,43 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
         return () => { cancelled = true; };
     }, [id, t, user, initialCourse]);
 
+    useEffect(() => {
+        const intent = searchParams.get('intent');
+        if (!user || !course || (intent !== 'enroll' && intent !== 'reserve')) return;
+
+        const openingId = searchParams.get('openingId');
+        const intentKey = `${intent}:${openingId ?? ''}`;
+        if (handledIntent.current === intentKey) return;
+        handledIntent.current = intentKey;
+        router.replace(`/courses/${id}`, { scroll: false });
+
+        if (user.role !== 'STUDENT') {
+            toast.error(t('courseDetail.enroll_failed'));
+            return;
+        }
+
+        if (intent === 'reserve') {
+            void api.post('/enrollments/reserve', { courseId: id })
+                .then(() => {
+                    toast.success(t('courseDetail.seat_reserved'));
+                    router.push('/dashboard/my-courses');
+                })
+                .catch((error) => toast.error(getErrorMessage(error) || t('courseDetail.reserve_failed')));
+            return;
+        }
+
+        const target = course.openings?.find((openingItem) => (
+            openingItem.id === openingId && (openingItem.status === 'OPEN' || openingItem.status === 'ANNOUNCEMENT')
+        )) ?? course.openings?.find((openingItem) => openingItem.status === 'OPEN')
+            ?? course.openings?.find((openingItem) => openingItem.status === 'ANNOUNCEMENT');
+        if (!target) {
+            toast.error(t('courseDetail.enroll_failed'));
+            return;
+        }
+
+        startTransition(() => setSelectedOpening(target));
+    }, [course, id, router, searchParams, t, user]);
+
     const handleEnrollSubmit = async () => {
         if (!selectedOpening) return;
         if (!gatewayId) {
@@ -352,6 +392,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
             // A guest that slipped past the CTA still gets a prompt, not "Unauthorized".
             if (isUnauthorized(e)) {
                 setSelectedOpening(null);
+                setLoginRedirectTo(`/courses/${id}?intent=enroll&openingId=${encodeURIComponent(selectedOpening.id)}`);
                 setShowLoginPrompt(true);
                 return;
             }
@@ -386,6 +427,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
 
     const handleEnrollClick = (target: Opening) => {
         if (!user) {
+            setLoginRedirectTo(`/courses/${id}?intent=enroll&openingId=${encodeURIComponent(target.id)}`);
             setShowLoginPrompt(true);
             return;
         }
@@ -428,7 +470,8 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
     const handleReserveClick = async () => {
         if (!user) {
             toast.error(t('courseDetail.login_to_reserve'));
-            router.push(`/login?redirect=/courses/${id}`);
+            setLoginRedirectTo(`/courses/${id}?intent=reserve`);
+            setShowLoginPrompt(true);
             return;
         }
         try {
@@ -1034,7 +1077,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
             <LoginPromptModal
                 open={showLoginPrompt}
                 onClose={() => setShowLoginPrompt(false)}
-                redirectTo={`/courses/${id}`}
+                redirectTo={loginRedirectTo}
             />
 
             {/* Enrollment Modal with Receipt Upload */}

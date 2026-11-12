@@ -9,6 +9,7 @@ import { useTheme } from '@/lib/theme-context';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import BackHomeButton from '@/components/BackHomeButton';
 import BrandLogo from '@/components/BrandLogo';
+import { clearPostAuthRedirect } from '@/lib/auth-redirect';
 
 export default function TwoFactorPage() {
     return (
@@ -53,6 +54,7 @@ function TwoFactorForm() {
             }, refreshToken);
 
             const redirect = searchParams?.get('redirect') || '/dashboard';
+            clearPostAuthRedirect();
             router.push(redirect);
         } catch (err) {
             setError(getErrorMessage(err) || t('recovery.twoFactorFail'));

@@ -58,6 +58,7 @@ export default function ExploreCourses({ hideHeader = false, dark }: { hideHeade
     // Guests are turned away before `selectedCourse` is set, so the course they
     // were trying to enter is kept here to build the post-login return link.
     const [pendingCourse, setPendingCourse] = useState<Course | null>(null);
+    const [pendingAction, setPendingAction] = useState<'enroll' | 'reserve'>('enroll');
     const [receiptFile, setReceiptFile] = useState<File | null>(null);
     const [gatewayId, setGatewayId] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -135,6 +136,7 @@ export default function ExploreCourses({ hideHeader = false, dark }: { hideHeade
         if (!opening) return;
         if (!user) {
             setPendingCourse(course);
+            setPendingAction('enroll');
             setShowLoginPrompt(true);
             return;
         }
@@ -148,6 +150,7 @@ export default function ExploreCourses({ hideHeader = false, dark }: { hideHeade
     const handleReserveClick = async (course: Course) => {
         if (!user) {
             setPendingCourse(course);
+            setPendingAction('reserve');
             setShowLoginPrompt(true);
             return;
         }
@@ -406,7 +409,9 @@ export default function ExploreCourses({ hideHeader = false, dark }: { hideHeade
             <LoginPromptModal
                 open={showLoginPrompt}
                 onClose={() => setShowLoginPrompt(false)}
-                redirectTo={pendingCourse ? `/courses/${pendingCourse.id}` : undefined}
+                redirectTo={pendingCourse
+                    ? `/courses/${pendingCourse.id}?intent=${pendingAction}${currentOpening(pendingCourse) ? `&openingId=${encodeURIComponent(currentOpening(pendingCourse)!.id)}` : ''}`
+                    : undefined}
             />
 
             {interestCourse && (

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { LogIn, UserPlus } from 'lucide-react';
 import { useI18n } from '@/lib/i18n-context';
 import { useTheme } from '@/lib/theme-context';
+import { persistPostAuthRedirect } from '@/lib/auth-redirect';
 
 interface LoginPromptModalProps {
     open: boolean;
@@ -23,7 +24,11 @@ export default function LoginPromptModal({ open, onClose, redirectTo }: LoginPro
     const { dark } = useTheme();
     if (!open) return null;
 
-    const withRedirect = (path: string) => (redirectTo ? `${path}?redirect=${encodeURIComponent(redirectTo)}` : path);
+    const withRedirect = (path: string) => {
+        if (!redirectTo) return path;
+        persistPostAuthRedirect(redirectTo);
+        return `${path}?redirect=${encodeURIComponent(redirectTo)}`;
+    };
 
     return (
         <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>

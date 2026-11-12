@@ -9,6 +9,7 @@ import { useTheme } from '@/lib/theme-context';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import BackHomeButton from '@/components/BackHomeButton';
 import BrandLogo from '@/components/BrandLogo';
+import { clearPostAuthRedirect } from '@/lib/auth-redirect';
 
 export default function TwoFactorSetupPage() {
     return (
@@ -77,6 +78,7 @@ function SetupForm() {
                 role: payload.role as Role
             }, refreshToken);
 
+            clearPostAuthRedirect();
             router.push(redirect);
         } catch (err) {
             setError(getErrorMessage(err) || t('twoFactorSetup.fail'));
