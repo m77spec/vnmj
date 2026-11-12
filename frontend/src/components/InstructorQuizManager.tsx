@@ -6,6 +6,7 @@ import { useI18n } from '@/lib/i18n-context';
 import { BookOpenCheck, Check, CircleHelp, FilePlus2, Loader, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 
 type QuestionType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';
+type InputLanguage = 'ARABIC' | 'ENGLISH' | 'BOTH';
 
 interface QuizOption {
     textAr: string;
@@ -71,6 +72,9 @@ const makeQuestion = (): QuizQuestion => ({
 export default function InstructorQuizManager({ openingId, courseId, lessons, administrative = false }: Props) {
     const { locale } = useI18n();
     const isAr = locale === 'ar';
+    const [inputLanguage, setInputLanguage] = useState<InputLanguage>(locale === 'ar' ? 'ARABIC' : 'ENGLISH');
+    const showArabic = inputLanguage !== 'ENGLISH';
+    const showEnglish = inputLanguage !== 'ARABIC';
     const openingEndpoint = administrative ? '/quizzes/admin/manage/opening' : '/quizzes/manage/opening';
     const [quizzes, setQuizzes] = useState<CourseQuiz[]>([]);
     const [loading, setLoading] = useState(true);
@@ -124,6 +128,7 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
 
     const startNew = () => {
         setEditingId(null);
+        setInputLanguage(isAr ? 'ARABIC' : 'ENGLISH');
         setDraft({
             id: '',
             titleAr: '',
@@ -141,6 +146,7 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
 
     const startEdit = (quiz: CourseQuiz) => {
         setEditingId(quiz.id);
+        setInputLanguage('BOTH');
         setDraft({
             ...quiz,
             questions: quiz.questions.map((question) => {
@@ -204,33 +210,44 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
             setNotice({ text: isAr ? 'اختر الدرس المرتبط بالاختبار.' : 'Select the lesson for this quiz.', error: true });
             return;
         }
+        const hasRequiredText = (arabic: string | null | undefined, english: string | null | undefined) =>
+            (!showArabic || !!arabic?.trim()) && (!showEnglish || !!english?.trim());
         if (draft.questions.length === 0 || draft.questions.some((question) =>
-            !question.textAr.trim() || !question.textEn.trim() ||
+            !hasRequiredText(question.textAr, question.textEn) ||
             question.options.length < 2 ||
-            question.options.some((option) => !option.textAr.trim() || !option.textEn.trim()) ||
+            question.options.some((option) => !hasRequiredText(option.textAr, option.textEn)) ||
             !question.options.some((option) => option.isCorrect),
         )) {
             setNotice({ text: isAr ? 'أكمل نص كل سؤال وخياراته وحدد إجابة صحيحة واحدة على الأقل.' : 'Complete each question and its options, and select at least one correct answer.', error: true });
             return;
         }
 
+        const localizedFields = (arabic: string | null | undefined, english: string | null | undefined) => {
+            if (inputLanguage === 'ARABIC') return { textAr: arabic?.trim() || '', textEn: arabic?.trim() || '' };
+            if (inputLanguage === 'ENGLISH') return { textAr: english?.trim() || '', textEn: english?.trim() || '' };
+            return { textAr: arabic?.trim() || '', textEn: english?.trim() || '' };
+        };
+        const title = localizedFields(draft.titleAr, draft.titleEn);
+        const description = localizedFields(draft.descriptionAr, draft.descriptionEn);
         const payload = {
             courseId,
-            titleAr: draft.titleAr.trim(),
-            titleEn: draft.titleEn.trim(),
-            descriptionAr: draft.descriptionAr || null,
-            descriptionEn: draft.descriptionEn || null,
+            titleAr: title.textAr,
+            titleEn: title.textEn,
+            descriptionAr: description.textAr || null,
+            descriptionEn: description.textEn || null,
             moduleId: draft.isFinal ? null : draft.moduleId,
             isFinal: !!draft.isFinal,
             isPublished: !!draft.isPublished,
             passScore: Math.min(100, Math.max(1, Number(draft.passScore) || 60)),
             questions: draft.questions.map((question, orderIndex) => ({
                 type: question.type,
-                textAr: question.textAr.trim(),
-                textEn: question.textEn.trim(),
-                explanationAr: question.explanationAr || null,
-                explanationEn: question.explanationEn || null,
-                options: question.options.map((option) => ({ ...option })),
+                ...localizedFields(question.textAr, question.textEn),
+                explanationAr: localizedFields(question.explanationAr, question.explanationEn).textAr || null,
+                explanationEn: localizedFields(question.explanationAr, question.explanationEn).textEn || null,
+                options: question.options.map((option) => ({
+                    ...localizedFields(option.textAr, option.textEn),
+                    isCorrect: option.isCorrect,
+                })),
                 correctIndex: question.type === 'SINGLE_CHOICE'
                     ? question.options.findIndex((option) => option.isCorrect)
                     : null,
@@ -238,7 +255,7 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
             })),
         };
         if (!payload.titleAr || !payload.titleEn) {
-            setNotice({ text: isAr ? 'أدخل عنوان الاختبار بالعربية والإنجليزية.' : 'Enter the quiz title in Arabic and English.', error: true });
+            setNotice({ text: isAr ? 'أدخل عنوان الاختبار باللغة المحددة.' : 'Enter the quiz title in the selected language.', error: true });
             return;
         }
 
@@ -271,6 +288,9 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
 
     const text = (ar: string, en: string) => isAr ? ar : en;
     const inputClass = 'w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-2.5 text-sm text-white outline-none focus:border-brand-gold/60 placeholder:text-gray-500';
+    const languageInput = (language: 'ARABIC' | 'ENGLISH') => language === 'ARABIC'
+        ? { dir: 'rtl' as const, lang: 'ar' }
+        : { dir: 'ltr' as const, lang: 'en' };
 
     return (
         <section className="space-y-5">
@@ -304,19 +324,40 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
                         <button type="button" onClick={() => setDraft(null)} aria-label={text('إغلاق', 'Close')} className="rounded-lg p-2 text-gray-400 hover:bg-white/5 hover:text-white"><X size={18} /></button>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('العنوان بالعربية', 'Title in Arabic')}
-                            <input className={inputClass} value={draft.titleAr} onChange={(event) => setDraft({ ...draft, titleAr: event.target.value })} required />
-                        </label>
-                        <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('العنوان بالإنجليزية', 'Title in English')}
-                            <input className={inputClass} value={draft.titleEn} onChange={(event) => setDraft({ ...draft, titleEn: event.target.value })} required />
-                        </label>
-                        <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('الوصف بالعربية', 'Description in Arabic')}
-                            <textarea className={inputClass} rows={2} value={draft.descriptionAr || ''} onChange={(event) => setDraft({ ...draft, descriptionAr: event.target.value })} />
-                        </label>
-                        <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('الوصف بالإنجليزية', 'Description in English')}
-                            <textarea className={inputClass} rows={2} value={draft.descriptionEn || ''} onChange={(event) => setDraft({ ...draft, descriptionEn: event.target.value })} />
-                        </label>
+                    <label className="block max-w-sm space-y-1.5 text-xs font-bold text-gray-300">
+                        {text('لغة إدخال الاختبار', 'Quiz input language')}
+                        <select
+                            className={inputClass}
+                            value={inputLanguage}
+                            onChange={(event) => setInputLanguage(event.target.value as InputLanguage)}
+                        >
+                            <option value="ARABIC">{text('العربية فقط', 'Arabic only')}</option>
+                            <option value="ENGLISH">{text('الإنجليزية فقط', 'English only')}</option>
+                            <option value="BOTH">{text('العربية والإنجليزية', 'Arabic and English')}</option>
+                        </select>
+                    </label>
+
+                    <div className={`grid gap-3 ${inputLanguage === 'BOTH' ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+                        {showArabic && (
+                            <>
+                                <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('العنوان بالعربية', 'Title in Arabic')}
+                                    <input {...languageInput('ARABIC')} className={inputClass} value={draft.titleAr} onChange={(event) => setDraft({ ...draft, titleAr: event.target.value })} required />
+                                </label>
+                                <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('الوصف بالعربية', 'Description in Arabic')}
+                                    <textarea {...languageInput('ARABIC')} className={inputClass} rows={2} value={draft.descriptionAr || ''} onChange={(event) => setDraft({ ...draft, descriptionAr: event.target.value })} />
+                                </label>
+                            </>
+                        )}
+                        {showEnglish && (
+                            <>
+                                <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('العنوان بالإنجليزية', 'Title in English')}
+                                    <input {...languageInput('ENGLISH')} className={inputClass} value={draft.titleEn} onChange={(event) => setDraft({ ...draft, titleEn: event.target.value })} required />
+                                </label>
+                                <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('الوصف بالإنجليزية', 'Description in English')}
+                                    <textarea {...languageInput('ENGLISH')} className={inputClass} rows={2} value={draft.descriptionEn || ''} onChange={(event) => setDraft({ ...draft, descriptionEn: event.target.value })} />
+                                </label>
+                            </>
+                        )}
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-3">
@@ -357,13 +398,17 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
                                     <h6 className="font-bold text-white">{text('السؤال', 'Question')} {qi + 1}</h6>
                                     {draft.questions.length > 1 && <button type="button" onClick={() => setDraft({ ...draft, questions: draft.questions.filter((_, i) => i !== qi) })} className="rounded-lg p-2 text-red-300 hover:bg-red-500/10" aria-label={text('حذف السؤال', 'Remove question')}><Trash2 size={16} /></button>}
                                 </div>
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                    <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('نص السؤال بالعربية', 'Question in Arabic')}
-                                        <textarea className={inputClass} rows={2} value={question.textAr} onChange={(event) => setQuestion(qi, { textAr: event.target.value })} required />
-                                    </label>
-                                    <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('نص السؤال بالإنجليزية', 'Question in English')}
-                                        <textarea className={inputClass} rows={2} value={question.textEn} onChange={(event) => setQuestion(qi, { textEn: event.target.value })} required />
-                                    </label>
+                                <div className={`grid gap-3 ${inputLanguage === 'BOTH' ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+                                    {showArabic && (
+                                        <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('نص السؤال بالعربية', 'Question in Arabic')}
+                                            <textarea {...languageInput('ARABIC')} className={inputClass} rows={2} value={question.textAr} onChange={(event) => setQuestion(qi, { textAr: event.target.value })} required />
+                                        </label>
+                                    )}
+                                    {showEnglish && (
+                                        <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('نص السؤال بالإنجليزية', 'Question in English')}
+                                            <textarea {...languageInput('ENGLISH')} className={inputClass} rows={2} value={question.textEn} onChange={(event) => setQuestion(qi, { textEn: event.target.value })} required />
+                                        </label>
+                                    )}
                                 </div>
                                 <label className="block max-w-sm space-y-1.5 text-xs font-bold text-gray-300">{text('نمط الإجابة', 'Answer type')}
                                     <select className={inputClass} value={question.type} onChange={(event) => changeQuestionType(qi, event.target.value as QuestionType)}>
@@ -375,7 +420,7 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
                                 <div className="space-y-2">
                                     <p className="text-xs font-bold text-gray-300">{text(question.type === 'MULTIPLE_CHOICE' ? 'حدد كل الإجابات الصحيحة' : 'حدد الإجابة الصحيحة', question.type === 'MULTIPLE_CHOICE' ? 'Select all correct answers' : 'Select the correct answer')}</p>
                                     {question.options.map((option, oi) => (
-                                        <div key={oi} className="grid items-center gap-2 sm:grid-cols-[24px_1fr_1fr]">
+                                        <div key={oi} className={`grid items-center gap-2 ${inputLanguage === 'BOTH' ? 'sm:grid-cols-[24px_1fr_1fr]' : 'grid-cols-[24px_minmax(0,1fr)]'}`}>
                                             <input
                                                 aria-label={text(`الخيار ${oi + 1} صحيح`, `Option ${oi + 1} is correct`)}
                                                 type={question.type === 'MULTIPLE_CHOICE' ? 'checkbox' : 'radio'}
@@ -387,8 +432,8 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
                                                     else setQuestion(qi, { correctIndex: oi, options: question.options.map((item, index) => ({ ...item, isCorrect: index === oi })) });
                                                 }}
                                             />
-                                            <input className={inputClass} aria-label={text(`الخيار ${oi + 1} بالعربية`, `Option ${oi + 1} in Arabic`)} value={option.textAr} onChange={(event) => setOption(qi, oi, { textAr: event.target.value })} readOnly={question.type === 'TRUE_FALSE'} required />
-                                            <input className={inputClass} aria-label={text(`الخيار ${oi + 1} بالإنجليزية`, `Option ${oi + 1} in English`)} value={option.textEn} onChange={(event) => setOption(qi, oi, { textEn: event.target.value })} readOnly={question.type === 'TRUE_FALSE'} required />
+                                            {showArabic && <input {...languageInput('ARABIC')} className={inputClass} aria-label={text(`الخيار ${oi + 1} بالعربية`, `Option ${oi + 1} in Arabic`)} value={option.textAr} onChange={(event) => setOption(qi, oi, { textAr: event.target.value })} readOnly={question.type === 'TRUE_FALSE'} required />}
+                                            {showEnglish && <input {...languageInput('ENGLISH')} className={inputClass} aria-label={text(`الخيار ${oi + 1} بالإنجليزية`, `Option ${oi + 1} in English`)} value={option.textEn} onChange={(event) => setOption(qi, oi, { textEn: event.target.value })} readOnly={question.type === 'TRUE_FALSE'} required />}
                                         </div>
                                     ))}
                                     {question.type !== 'TRUE_FALSE' && question.options.length < 6 && (
@@ -408,13 +453,17 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
                                         </button>
                                     )}
                                 </div>
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                    <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('تفسير الإجابة بالعربية (اختياري)', 'Explanation in Arabic (optional)')}
-                                        <textarea className={inputClass} rows={2} value={question.explanationAr} onChange={(event) => setQuestion(qi, { explanationAr: event.target.value })} />
-                                    </label>
-                                    <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('تفسير الإجابة بالإنجليزية (اختياري)', 'Explanation in English (optional)')}
-                                        <textarea className={inputClass} rows={2} value={question.explanationEn} onChange={(event) => setQuestion(qi, { explanationEn: event.target.value })} />
-                                    </label>
+                                <div className={`grid gap-3 ${inputLanguage === 'BOTH' ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+                                    {showArabic && (
+                                        <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('تفسير الإجابة بالعربية (اختياري)', 'Explanation in Arabic (optional)')}
+                                            <textarea {...languageInput('ARABIC')} className={inputClass} rows={2} value={question.explanationAr} onChange={(event) => setQuestion(qi, { explanationAr: event.target.value })} />
+                                        </label>
+                                    )}
+                                    {showEnglish && (
+                                        <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('تفسير الإجابة بالإنجليزية (اختياري)', 'Explanation in English (optional)')}
+                                            <textarea {...languageInput('ENGLISH')} className={inputClass} rows={2} value={question.explanationEn} onChange={(event) => setQuestion(qi, { explanationEn: event.target.value })} />
+                                        </label>
+                                    )}
                                 </div>
                             </article>
                         ))}
