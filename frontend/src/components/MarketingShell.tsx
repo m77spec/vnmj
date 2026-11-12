@@ -48,6 +48,9 @@ export default function MarketingShell({ children, title, subtitle }: { children
                     <Link href="/about" className={linkCls}>
                         {isAr ? 'من نحن' : 'About Us'}
                     </Link>
+                    <Link href="/instructors" className={linkCls}>
+                        {isAr ? 'المدرسون' : 'Instructors'}
+                    </Link>
                     <Link href="/faq" className={linkCls}>
                         {isAr ? 'الأسئلة الشائعة' : 'FAQ'}
                     </Link>

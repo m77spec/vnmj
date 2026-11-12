@@ -333,7 +333,16 @@
         "nav_people": "إدارة المستخدمين",
         "nav_operations": "المالية والعمليات",
         "nav_configuration": "الإعدادات",
-        "nav_content": "المحتوى"
+        "nav_content": "المحتوى",
+        "nav_public": "صفحات المنصة",
+        "public_courses": "تصفح الدورات",
+        "public_about": "من نحن",
+        "public_instructors": "المدرسون",
+        "public_blog": "المدونة",
+        "public_certificates": "التحقق من الشهادة",
+        "public_faq": "الأسئلة الشائعة",
+        "public_contact": "تواصل معنا",
+        "public_join_instructor": "انضم كمدرس"
     },
     "submissionsInbox": {
         "title": "تسليمات الطلاب",

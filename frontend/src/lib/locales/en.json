@@ -334,7 +334,16 @@
         "nav_people": "People management",
         "nav_operations": "Finance & operations",
         "nav_configuration": "Configuration",
-        "nav_content": "Content"
+        "nav_content": "Content",
+        "nav_public": "Platform pages",
+        "public_courses": "Browse Courses",
+        "public_about": "About Us",
+        "public_instructors": "Instructors",
+        "public_blog": "Blog",
+        "public_certificates": "Verify Certificate",
+        "public_faq": "Frequently Asked Questions",
+        "public_contact": "Contact Us",
+        "public_join_instructor": "Join as an Instructor"
     },
     "submissionsInbox": {
         "title": "Student Submissions",

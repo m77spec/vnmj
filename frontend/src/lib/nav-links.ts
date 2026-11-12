@@ -25,6 +25,11 @@ import {
     Star,
     PanelTop,
     BellRing,
+    Info,
+    Newspaper,
+    CircleHelp,
+    Mail,
+    UserRoundPlus,
     type LucideIcon,
 } from 'lucide-react';
 
@@ -38,6 +43,19 @@ export interface NavLink {
 export interface NavSection {
     title: string;
     links: NavLink[];
+}
+
+export function buildPublicNavLinks(t: (key: string) => string): NavLink[] {
+    return [
+        { name: t('sidebar.public_courses'), href: '/courses', icon: BookOpen, roles: [] },
+        { name: t('sidebar.public_about'), href: '/about', icon: Info, roles: [] },
+        { name: t('sidebar.public_instructors'), href: '/instructors', icon: GraduationCap, roles: [] },
+        { name: t('sidebar.public_blog'), href: '/blog', icon: Newspaper, roles: [] },
+        { name: t('sidebar.public_certificates'), href: '/verify-certificate', icon: BadgeCheck, roles: [] },
+        { name: t('sidebar.public_faq'), href: '/faq', icon: CircleHelp, roles: [] },
+        { name: t('sidebar.public_contact'), href: '/contact', icon: Mail, roles: [] },
+        { name: t('sidebar.public_join_instructor'), href: '/join-as-instructor', icon: UserRoundPlus, roles: [] },
+    ];
 }
 
 export function isNavLinkActive(pathname: string, link: NavLink, links: NavLink[]) {

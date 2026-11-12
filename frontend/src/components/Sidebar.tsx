@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useI18n } from '@/lib/i18n-context';
 import { useTheme } from '@/lib/theme-context';
 import { api, getErrorMessage } from '@/lib/api';
-import { buildAdminNavLinks, buildNavLinks, getActiveNavLink, groupAdminNavLinks, groupInstructorNavLinks, groupStudentNavLinks, isNavLinkActive } from '@/lib/nav-links';
+import { buildAdminNavLinks, buildNavLinks, buildPublicNavLinks, getActiveNavLink, groupAdminNavLinks, groupInstructorNavLinks, groupStudentNavLinks, isNavLinkActive } from '@/lib/nav-links';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import ThemeToggle from '@/components/ThemeToggle';
 import { LogOut } from 'lucide-react';
@@ -53,12 +53,18 @@ export default function Sidebar() {
     const links = roleLinks.length > 0
         ? roleLinks
         : allNav.filter(link => ['/dashboard', '/dashboard/profile', '/dashboard/support'].includes(link.href));
-    const sections = roleKey === 'STUDENT'
+    const publicLinks = buildPublicNavLinks(t);
+    const navigationLinks = [...links, ...publicLinks];
+    const roleSections = roleKey === 'STUDENT'
         ? groupStudentNavLinks(links, t)
         : roleKey === 'INSTRUCTOR'
             ? groupInstructorNavLinks(links, t)
             : groupAdminNavLinks(links, t);
-    const activeLink = getActiveNavLink(pathname, links);
+    const sections = [
+        ...roleSections,
+        { title: t('sidebar.nav_public'), links: publicLinks },
+    ];
+    const activeLink = getActiveNavLink(pathname, navigationLinks);
 
     return (
         <aside className={`sticky top-0 hidden h-screen w-[17rem] shrink-0 flex-col justify-between border-e lg:flex ${dark ? 'border-white/10 bg-gradient-to-b from-brand-navy via-[#0e2a52] to-[#0a1e3c]' : 'border-line bg-surface-raised shadow-sm'}`}>
@@ -98,7 +104,7 @@ export default function Sidebar() {
                                 </h2>
                             )}
                             {section.links.map((link) => {
-                                const isActive = isNavLinkActive(pathname, link, links);
+                                const isActive = isNavLinkActive(pathname, link, navigationLinks);
                                 const Icon = link.icon;
                                 return (
                                     <Link key={link.href} href={link.href} aria-current={isActive ? 'page' : undefined}>
