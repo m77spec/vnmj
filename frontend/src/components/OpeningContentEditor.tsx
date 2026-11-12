@@ -231,8 +231,36 @@ export default function OpeningContentEditor({ openingId }: { openingId: string 
 
             {message && <p role="status" className={`rounded-xl border px-4 py-3 text-sm font-semibold ${message.error ? 'border-red-400/20 bg-red-500/10 text-red-300' : 'border-emerald-400/20 bg-emerald-500/10 text-emerald-300'}`}>{message.text}</p>}
 
-            <div className="grid gap-4 lg:grid-cols-[250px_1fr]">
-                <nav className="space-y-2">
+            <div className="grid min-w-0 gap-4 lg:grid-cols-[250px_minmax(0,1fr)]">
+                {lessons.length > 0 && (
+                    <label className="block lg:hidden">
+                        <span className="mb-2 block text-xs font-bold text-gray-400">
+                            {t('اختر درسًا للتعديل', 'Choose a lesson to edit')}
+                        </span>
+                        <select
+                            value={creating ? '__new__' : selectedId ?? ''}
+                            onChange={(event) => {
+                                if (event.target.value === '__new__') {
+                                    startNew();
+                                    return;
+                                }
+                                const lesson = lessons.find((item) => item.id === event.target.value);
+                                if (lesson) selectLesson(lesson);
+                            }}
+                            className="w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-3 text-sm font-bold text-white outline-none focus:border-brand-gold/60 [&>option]:bg-brand-navy"
+                        >
+                            {creating && (
+                                <option value="__new__">{t('درس جديد خاص بالدفعة', 'New batch-only lesson')}</option>
+                            )}
+                            {lessons.map((lesson, index) => (
+                                <option key={lesson.id} value={lesson.id}>
+                                    {index + 1}. {isAr ? lesson.titleAr : lesson.titleEn}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                )}
+                <nav className="hidden space-y-2 lg:block">
                     {lessons.map((lesson, index) => (
                         <button key={lesson.id} type="button" onClick={() => selectLesson(lesson)} className={`w-full rounded-xl border px-3 py-3 text-start text-sm font-bold ${selectedId === lesson.id && !creating ? 'border-brand-gold/40 bg-brand-gold/10 text-white' : 'border-white/5 text-gray-300 hover:bg-white/5'}`}>
                             <span className="me-2 text-brand-gold-light">{index + 1}.</span>{isAr ? lesson.titleAr : lesson.titleEn}
@@ -240,6 +268,11 @@ export default function OpeningContentEditor({ openingId }: { openingId: string 
                     ))}
                     {lessons.length === 0 && <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-gray-500">{t('لم تتم إضافة دروس بعد.', 'No lessons have been added yet.')}</p>}
                 </nav>
+                {lessons.length === 0 && (
+                    <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-gray-500 lg:hidden">
+                        {t('لم تتم إضافة دروس بعد.', 'No lessons have been added yet.')}
+                    </p>
+                )}
 
                 {(creating || selectedId) && (
                     <form onSubmit={save} className="space-y-4 rounded-xl border border-white/5 bg-black/10 p-4">

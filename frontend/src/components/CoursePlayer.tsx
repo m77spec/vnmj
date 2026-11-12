@@ -806,7 +806,7 @@ export default function CoursePlayer({ courseId }: Props) {
         ];
         return (
             <div className="mt-6">
-                <div className="flex flex-wrap gap-2 rounded-2xl border border-line bg-surface-raised p-2">
+                <div className="flex min-w-0 flex-nowrap gap-2 overflow-x-auto rounded-2xl border border-line bg-surface-raised p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {tabs.map(tb => {
                         const Icon = tb.icon;
                         const active = deckTab === tb.key;
@@ -814,7 +814,7 @@ export default function CoursePlayer({ courseId }: Props) {
                             <button
                                 key={tb.key}
                                 onClick={() => setDeckTab(tb.key)}
-                                className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm font-bold transition-all duration-200 whitespace-nowrap cursor-pointer ${
+                                className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm font-bold transition-all duration-200 whitespace-nowrap cursor-pointer ${
                                     active
                                         ? 'border-brand-gold/30 bg-brand-navy text-white shadow-sm dark:bg-brand-navy-light'
                                         : 'border-transparent text-ink-subtle hover:border-line hover:bg-surface hover:text-ink'
@@ -990,6 +990,9 @@ export default function CoursePlayer({ courseId }: Props) {
     }
 
     const pct = progress?.percent ?? 0;
+    const selectedChapter = chapters.find((chapter) => (chapter.modules || []).some((module) => module.id === selected?.id));
+    const selectedChapterModules = selectedChapter?.modules || [];
+    const selectedChapterDone = selectedChapterModules.filter((module) => completedSet.has(module.id)).length;
 
     return (
         <div className="min-h-screen bg-surface-sunken">
@@ -1176,21 +1179,42 @@ export default function CoursePlayer({ courseId }: Props) {
                 <main className="flex-1 min-w-0 px-4 md:px-8 py-6">
                     {/* Mobile lesson picker */}
                     <div className={`mb-4 md:hidden ${focusMode ? 'hidden' : ''}`}>
-                        <select
-                            value={selected?.id ?? ''}
-                            onChange={e => setSelectedId(e.target.value)}
-                            className="w-full px-3 py-3 rounded-xl border border-line bg-surface font-bold text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand-gold-light/50 cursor-pointer transition-all duration-200"
-                        >
-                            {chapters.map((ch, ci) => (
-                                <optgroup key={ci} label={pick(ch, 'title') || t('player.lessons')}>
-                                    {(ch.modules || []).map(m => (
-                                        <option key={m.id} value={m.id}>
-                                            {completedSet.has(m.id) ? '✔ ' : isInProgress(m) ? '⏳ ' : ''}{pick(m, 'title')}
-                                        </option>
+                        <div className="rounded-2xl border border-line bg-surface-raised p-3 shadow-sm">
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-ink-subtle">
+                                        {isAr ? 'الدرس الحالي' : 'Current lesson'}
+                                    </p>
+                                    <p className="truncate text-sm font-black text-ink">
+                                        {selected ? pick(selected, 'title') : t('player.no_lesson')}
+                                    </p>
+                                </div>
+                                {selectedChapter && (
+                                    <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-black text-emerald-700 dark:text-emerald-300">
+                                        {selectedChapterDone}/{selectedChapterModules.length}
+                                    </span>
+                                )}
+                            </div>
+                            <label className="relative block">
+                                <span className="sr-only">{isAr ? 'اختر درسًا' : 'Choose a lesson'}</span>
+                                <select
+                                    value={selected?.id ?? ''}
+                                    onChange={e => setSelectedId(e.target.value)}
+                                    className="w-full appearance-none rounded-xl border border-line bg-surface px-3 py-3 pe-10 text-sm font-bold text-ink focus:outline-none focus:ring-2 focus:ring-brand-gold-light/50 cursor-pointer transition-all duration-200"
+                                >
+                                    {chapters.map((ch, ci) => (
+                                        <optgroup key={ci} label={pick(ch, 'title') || t('player.lessons')}>
+                                            {(ch.modules || []).map(m => (
+                                                <option key={m.id} value={m.id}>
+                                                    {completedSet.has(m.id) ? '✔ ' : isInProgress(m) ? '⏳ ' : ''}{pick(m, 'title')}
+                                                </option>
+                                            ))}
+                                        </optgroup>
                                     ))}
-                                </optgroup>
-                            ))}
-                        </select>
+                                </select>
+                                <ChevronDown size={16} className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
+                            </label>
+                        </div>
                     </div>
                     {tasksError && (
                         <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">

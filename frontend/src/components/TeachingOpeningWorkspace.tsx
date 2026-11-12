@@ -156,6 +156,17 @@ export default function TeachingOpeningWorkspace() {
     const tab: Tab = availableTabs.includes(requestedTab)
         ? requestedTab
         : (availableTabs[0] ?? 'roster');
+    const tabLabel = (key: Tab) => ({
+        roster: isAr ? 'الطلاب والدرجات' : 'Roster',
+        tasks: t('tasks.tasks_title'),
+        announcements: isAr ? 'الإعلانات' : 'Announcements',
+        calendar: isAr ? 'التقويم' : 'Calendar',
+        sessions: isAr ? 'الجلسات' : 'Sessions',
+        content: isAr ? 'المحتوى' : 'Content',
+        quizzes: isAr ? 'الاختبارات' : 'Quizzes',
+        chat: isAr ? 'الدردشة' : 'Chat',
+        analytics: isAr ? 'الإحصائيات' : 'Analytics',
+    })[key];
 
     const { data: syllabusData } = useFetchData<SyllabusData>(
         opening?.access.canReadContent ? `/lms/courses/${opening.course.id}/syllabus` : null,
@@ -328,7 +339,25 @@ export default function TeachingOpeningWorkspace() {
                     {statPill(<Hash size={16} />, statusLabel, isAr ? 'الحالة' : 'Status')}
                 </div>
 
-                <div className="flex w-full items-center gap-1 bg-brand-navy-dark border border-white/5 rounded-2xl p-1.5 overflow-x-auto">
+                <label className="block md:hidden">
+                    <span className="mb-2 block text-xs font-bold text-gray-400">
+                        {isAr ? 'انتقل إلى قسم الدفعة' : 'Go to batch section'}
+                    </span>
+                    <select
+                        value={tab}
+                        onChange={(event) => {
+                            const nextTab = availableTabs.find((item) => item === event.target.value);
+                            if (nextTab) setTab(nextTab);
+                        }}
+                        className="w-full rounded-xl border border-white/10 bg-brand-navy-dark px-4 py-3 text-sm font-bold text-white outline-none focus:border-brand-gold/50 focus:ring-2 focus:ring-brand-gold/20 [&>option]:bg-brand-navy"
+                    >
+                        {availableTabs.map((item) => (
+                            <option key={item} value={item}>{tabLabel(item)}</option>
+                        ))}
+                    </select>
+                </label>
+
+                <div className="hidden min-w-0 w-full items-center gap-1 overflow-x-auto rounded-2xl border border-white/5 bg-brand-navy-dark p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex">
                     {availableTabs.includes('roster') && tabBtn('roster', <Settings2 size={16} />, isAr ? 'الطلاب والدرجات' : 'Roster')}
                     {availableTabs.includes('tasks') && tabBtn('tasks', <ClipboardList size={16} />, t('tasks.tasks_title'))}
                     {availableTabs.includes('announcements') && tabBtn('announcements', <Megaphone size={16} />, isAr ? 'الإعلانات' : 'Announcements')}
