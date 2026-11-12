@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useI18n } from '@/lib/i18n-context';
 import { useTheme } from '@/lib/theme-context';
 import { api, getErrorMessage } from '@/lib/api';
-import { buildAdminNavLinks, buildNavLinks, buildPublicNavLinks, getActiveNavLink, groupAdminNavLinks, groupInstructorNavLinks, groupStudentNavLinks, isNavLinkActive } from '@/lib/nav-links';
+import { buildAdminNavLinks, buildNavLinks, buildAuthenticatedPublicNavLinks, getActiveNavLink, groupAdminNavLinks, groupInstructorNavLinks, groupStudentNavLinks, isNavLinkActive } from '@/lib/nav-links';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import ThemeToggle from '@/components/ThemeToggle';
 import { LogOut } from 'lucide-react';
@@ -53,7 +53,7 @@ export default function Sidebar() {
     const links = roleLinks.length > 0
         ? roleLinks
         : allNav.filter(link => ['/dashboard', '/dashboard/profile', '/dashboard/support'].includes(link.href));
-    const publicLinks = buildPublicNavLinks(t);
+    const publicLinks = buildAuthenticatedPublicNavLinks(t, roleKey);
     const navigationLinks = [...links, ...publicLinks];
     const roleSections = roleKey === 'STUDENT'
         ? groupStudentNavLinks(links, t)

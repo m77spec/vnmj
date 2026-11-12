@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth, Role } from '@/lib/auth-context';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -41,11 +41,15 @@ function LoginForm() {
     const [needsVerification, setNeedsVerification] = useState(searchParams?.get('verificationEmailFailed') === '1');
     const [resendingVerification, setResendingVerification] = useState(false);
     const [verificationResent, setVerificationResent] = useState(false);
-    const { login } = useAuth();
+    const { login, isAuthenticated } = useAuth();
     const router = useRouter();
     const { t } = useI18n();
     const { dark } = useTheme();
     const redirect = searchParams?.get('redirect') || '/dashboard';
+
+    useEffect(() => {
+        if (isAuthenticated) router.replace('/dashboard');
+    }, [isAuthenticated, router]);
 
     const inputCls = `block w-full px-4 py-3.5 border rounded-xl focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none transition-all duration-200 ${dark ? 'bg-white/5 border-white/10 text-white hover:bg-white/10 [color-scheme:dark]' : 'bg-white border-gray-300 text-brand-charcoal hover:bg-gray-50'}`;
     const labelCls = `block text-sm font-black mb-1.5 ${dark ? 'text-gray-300' : 'text-gray-700'}`;
@@ -124,6 +128,14 @@ function LoginForm() {
             setResendingVerification(false);
         }
     };
+
+    if (isAuthenticated) {
+        return (
+            <div className={`min-h-screen flex items-center justify-center font-bold ${dark ? 'bg-brand-navy-dark text-gray-300' : 'bg-gray-50 text-gray-600'}`}>
+                {t('common.loading')}
+            </div>
+        );
+    }
 
     return (
         <div className={`min-h-screen flex items-center justify-center relative overflow-hidden p-4 ${dark ? 'bg-brand-navy-dark' : 'bg-gray-50'}`}>

@@ -10,7 +10,7 @@ import LanguageSwitcher from '@/components/LanguageSwitcher';
 import ThemeToggle from '@/components/ThemeToggle';
 import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
-import { buildAdminNavLinks, buildNavLinks, buildPublicNavLinks, groupAdminNavLinks, groupInstructorNavLinks, groupStudentNavLinks, isNavLinkActive } from '@/lib/nav-links';
+import { buildAdminNavLinks, buildNavLinks, buildAuthenticatedPublicNavLinks, buildPublicNavLinks, groupAdminNavLinks, groupInstructorNavLinks, groupStudentNavLinks, isNavLinkActive } from '@/lib/nav-links';
 
 export default function PublicMobileMenu({ dark }: { dark?: boolean }) {
     const { t } = useI18n();
@@ -41,7 +41,7 @@ export default function PublicMobileMenu({ dark }: { dark?: boolean }) {
         : roleKey === 'INSTRUCTOR'
             ? groupInstructorNavLinks(links, t)
             : groupAdminNavLinks(links, t);
-    const publicLinks = buildPublicNavLinks(t);
+    const publicLinks = user ? buildAuthenticatedPublicNavLinks(t, roleKey) : buildPublicNavLinks(t);
     const navigationLinks = [...links, ...publicLinks];
 
     return (

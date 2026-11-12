@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { API_BASE_URL, getErrorMessage } from '@/lib/api';
 import { useI18n } from '@/lib/i18n-context';
 import { useTheme } from '@/lib/theme-context';
+import { useAuth } from '@/lib/auth-context';
 import { formatDate } from '@/lib/format';
 import BackHomeButton from '@/components/BackHomeButton';
 import BrandLogo from '@/components/BrandLogo';
@@ -35,6 +36,7 @@ export default function VerifyCertificateForm() {
     const [loading, setLoading] = useState(false);
     const { locale } = useI18n();
     const { dark } = useTheme();
+    const { user } = useAuth();
     const isAr = locale === 'ar';
     const autoRan = useRef(false);
 
@@ -74,8 +76,10 @@ export default function VerifyCertificateForm() {
                 <Link href="/" className="flex items-center">
                     <BrandLogo className="h-8 w-auto" />
                 </Link>
-                <Link href="/login" className={`text-sm font-bold transition ${dark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-brand-navy'}`}>
-                    {isAr ? 'تسجيل الدخول' : 'Sign in'}
+                <Link href={user ? '/dashboard' : '/login'} className={`text-sm font-bold transition ${dark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-brand-navy'}`}>
+                    {user
+                        ? (isAr ? 'لوحة القيادة' : 'Dashboard')
+                        : (isAr ? 'تسجيل الدخول' : 'Sign in')}
                 </Link>
             </header>
 

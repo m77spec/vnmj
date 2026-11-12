@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api, getErrorMessage } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
@@ -8,16 +8,53 @@ import { useI18n } from '@/lib/i18n-context';
 import { useTheme } from '@/lib/theme-context';
 import { UploadCloud, CheckCircle, Video, User, Briefcase } from 'lucide-react';
 import MarketingShell from '@/components/MarketingShell';
+import { useAuth } from '@/lib/auth-context';
 
 export default function JoinAsInstructorPage() {
     const router = useRouter();
     const { t, locale } = useI18n();
     const { dark } = useTheme();
+    const { isAuthenticated } = useAuth();
     const isAr = locale === 'ar';
     const [formData, setFormData] = useState({ name: '', bio: '', specialty: '', videoIntroUrl: '' });
     const [cvFile, setCvFile] = useState<File | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [profileLoading, setProfileLoading] = useState(true);
+    const [profileError, setProfileError] = useState('');
+    const [accountEmail, setAccountEmail] = useState('');
+
+    useEffect(() => {
+        if (!isAuthenticated) return;
+
+        let active = true;
+        const loadProfile = async () => {
+            setProfileLoading(true);
+            setProfileError('');
+            try {
+                const response = await api.get('/users/me');
+                if (!active) return;
+                const metadata = response.data?.metadata;
+                const profileName = [
+                    metadata?.fullName,
+                    metadata?.nameAr,
+                    metadata?.nameEn,
+                ].find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+                setFormData((current) => ({
+                    ...current,
+                    name: current.name.trim() ? current.name : profileName?.trim() || '',
+                }));
+                setAccountEmail(typeof response.data?.email === 'string' ? response.data.email : '');
+            } catch (error) {
+                if (active) setProfileError(getErrorMessage(error) || t('common.error'));
+            } finally {
+                if (active) setProfileLoading(false);
+            }
+        };
+
+        void loadProfile();
+        return () => { active = false; };
+    }, [isAuthenticated, t]);
 
     const inputCls = dark
         ? 'w-full border border-white/10 bg-white/5 hover:bg-white/10 rounded-xl p-4 focus:ring-2 focus:ring-brand-gold focus:border-brand-gold outline-none transition-all text-white [color-scheme:dark]'
@@ -86,6 +123,16 @@ export default function JoinAsInstructorPage() {
         );
     }
 
+    if (isAuthenticated && profileLoading) {
+        return (
+            <MarketingShell>
+                <div className={`flex min-h-64 items-center justify-center font-bold ${dark ? 'text-gray-300' : 'text-gray-600'}`}>
+                    {t('common.loading')}
+                </div>
+            </MarketingShell>
+        );
+    }
+
     return (
         <MarketingShell
             title={t('joinInstructor.teach_title')}
@@ -95,6 +142,12 @@ export default function JoinAsInstructorPage() {
             <div className="max-w-3xl mx-auto mt-0 md:-mt-24 relative z-10 pb-20">
                 <div className={`p-8 md:p-12 rounded-3xl shadow-sm border ${dark ? 'bg-brand-navy-dark border-white/10' : 'bg-white border-gray-200'}`}>
                     <h2 className={`text-2xl font-black mb-8 border-b pb-4 ${dark ? 'text-white border-white/10' : 'text-brand-navy border-gray-200'}`}>{t('joinInstructor.app_heading')}</h2>
+
+                    {profileError && (
+                        <p role="alert" className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm font-bold text-red-600 dark:text-red-300">
+                            {isAr ? 'تعذّر تحميل بيانات حسابك. يمكنك إدخال اسمك يدويًا والمحاولة لاحقًا.' : `We could not load your account details. You can enter your name manually. ${profileError}`}
+                        </p>
+                    )}
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -109,6 +162,11 @@ export default function JoinAsInstructorPage() {
                                     value={formData.name}
                                     onChange={e => setFormData({ ...formData, name: e.target.value })}
                                 />
+                                {accountEmail && (
+                                    <p className={`mt-2 text-xs ${dark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                        {isAr ? 'الحساب المستخدم:' : 'Account:'} <span dir="ltr">{accountEmail}</span>
+                                    </p>
+                                )}
                             </div>
                             <div>
                                 <label className={labelCls}>

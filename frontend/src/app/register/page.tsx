@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, getErrorMessage, isRegistrationEmailFailure } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -11,6 +11,7 @@ import { useI18n } from '@/lib/i18n-context';
 import { useTheme } from '@/lib/theme-context';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import SelectField from '@/components/SelectField';
+import { useAuth } from '@/lib/auth-context';
 
 export default function RegisterPage() {
     return (
@@ -27,6 +28,11 @@ function RegisterForm() {
     const redirect = useSearchParams()?.get('redirect') || '/dashboard';
     const { t } = useI18n();
     const { dark } = useTheme();
+    const { isAuthenticated } = useAuth();
+
+    useEffect(() => {
+        if (isAuthenticated) router.replace('/dashboard');
+    }, [isAuthenticated, router]);
 
     const [formData, setFormData] = useState({
         fullName: '',
@@ -81,6 +87,14 @@ function RegisterForm() {
             setIsLoading(false);
         }
     };
+
+    if (isAuthenticated) {
+        return (
+            <div className={`min-h-screen flex items-center justify-center font-bold ${dark ? 'bg-brand-navy-dark text-gray-300' : 'bg-gray-50 text-gray-600'}`}>
+                {t('common.loading')}
+            </div>
+        );
+    }
 
     return (
         <div className={`min-h-screen flex flex-col items-center justify-center relative overflow-hidden p-4 ${dark ? 'bg-brand-navy-dark' : 'bg-gray-50'}`}>
