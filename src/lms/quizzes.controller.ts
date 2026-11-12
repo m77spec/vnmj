@@ -77,6 +77,43 @@ export class QuizzesController {
     return this.quizzes.removeForInstructor(id, openingId, req.user.userId, req.user.role);
   }
 
+  @ApiOperation({ summary: 'List quizzes for a managed opening' })
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles(Role.ADMIN, Role.COURSE_MANAGER)
+  @RequirePermissions(PERMISSIONS.CONTENT_READ)
+  @Get('admin/manage/opening/:openingId')
+  listForManagedOpening(@Param('openingId') openingId: string, @Request() req: any) {
+    return this.quizzes.listForInstructor(openingId, req.user.userId, req.user.role);
+  }
+
+  @ApiOperation({ summary: 'Create a quiz for a managed opening' })
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles(Role.ADMIN, Role.COURSE_MANAGER)
+  @RequirePermissions(PERMISSIONS.CONTENT_WRITE)
+  @Post('admin/manage/opening/:openingId')
+  createForManagedOpening(@Param('openingId') openingId: string, @Body() dto: any, @Request() req: any) {
+    if (!dto?.titleAr || !dto?.titleEn) throw new BadRequestException('titleAr and titleEn are required');
+    return this.quizzes.createForInstructor(dto, openingId, req.user.userId, req.user.role);
+  }
+
+  @ApiOperation({ summary: 'Update a quiz for a managed opening' })
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles(Role.ADMIN, Role.COURSE_MANAGER)
+  @RequirePermissions(PERMISSIONS.CONTENT_WRITE)
+  @Patch('admin/manage/opening/:openingId/:id')
+  updateForManagedOpening(@Param('openingId') openingId: string, @Param('id') id: string, @Body() dto: any, @Request() req: any) {
+    return this.quizzes.updateForInstructor(id, dto, openingId, req.user.userId, req.user.role);
+  }
+
+  @ApiOperation({ summary: 'Delete a quiz for a managed opening' })
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles(Role.ADMIN, Role.COURSE_MANAGER)
+  @RequirePermissions(PERMISSIONS.CONTENT_DELETE)
+  @Delete('admin/manage/opening/:openingId/:id')
+  removeForManagedOpening(@Param('openingId') openingId: string, @Param('id') id: string, @Request() req: any) {
+    return this.quizzes.removeForInstructor(id, openingId, req.user.userId, req.user.role);
+  }
+
   @ApiOperation({ summary: 'List quizzes for a course (with answers when includeUnpublished=true)' })
   @UseGuards(OptionalJwtAuthGuard)
   @Get('course/:courseId')

@@ -50,6 +50,7 @@ interface Props {
     openingId: string;
     courseId: string;
     lessons: Lesson[];
+    administrative?: boolean;
 }
 
 const makeQuestion = (): QuizQuestion => ({
@@ -67,9 +68,10 @@ const makeQuestion = (): QuizQuestion => ({
     correctIndex: 0,
 });
 
-export default function InstructorQuizManager({ openingId, courseId, lessons }: Props) {
+export default function InstructorQuizManager({ openingId, courseId, lessons, administrative = false }: Props) {
     const { locale } = useI18n();
     const isAr = locale === 'ar';
+    const openingEndpoint = administrative ? '/quizzes/admin/manage/opening' : '/quizzes/manage/opening';
     const [quizzes, setQuizzes] = useState<CourseQuiz[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -95,20 +97,20 @@ export default function InstructorQuizManager({ openingId, courseId, lessons }: 
     const refresh = useCallback(async () => {
         setLoading(true);
         try {
-            const response = await api.get(`/quizzes/manage/opening/${openingId}`);
+            const response = await api.get(`${openingEndpoint}/${openingId}`);
             setQuizzes(response.data);
         } catch (error) {
             setNotice({ text: getErrorMessage(error) || (isAr ? 'تعذر تحميل الاختبارات.' : 'Could not load quizzes.'), error: true });
         } finally {
             setLoading(false);
         }
-    }, [openingId, isAr]);
+    }, [openingEndpoint, openingId, isAr]);
 
     useEffect(() => {
         let active = true;
         const loadQuizzes = async () => {
             try {
-                const response = await api.get(`/quizzes/manage/opening/${openingId}`);
+                const response = await api.get(`${openingEndpoint}/${openingId}`);
                 if (active) setQuizzes(response.data);
             } catch (error) {
                 if (active) setNotice({ text: getErrorMessage(error) || (isAr ? 'تعذر تحميل الاختبارات.' : 'Could not load quizzes.'), error: true });
@@ -118,7 +120,7 @@ export default function InstructorQuizManager({ openingId, courseId, lessons }: 
         };
         void loadQuizzes();
         return () => { active = false; };
-    }, [openingId, isAr]);
+    }, [openingEndpoint, openingId, isAr]);
 
     const startNew = () => {
         setEditingId(null);
@@ -243,8 +245,8 @@ export default function InstructorQuizManager({ openingId, courseId, lessons }: 
         setSaving(true);
         setNotice(null);
         try {
-            if (editingId) await api.patch(`/quizzes/manage/opening/${openingId}/${editingId}`, payload);
-            else await api.post(`/quizzes/manage/opening/${openingId}`, payload);
+            if (editingId) await api.patch(`${openingEndpoint}/${openingId}/${editingId}`, payload);
+            else await api.post(`${openingEndpoint}/${openingId}`, payload);
             setDraft(null);
             setEditingId(null);
             setNotice({ text: isAr ? 'تم حفظ الاختبار بنجاح.' : 'Quiz saved successfully.', error: false });
@@ -259,7 +261,7 @@ export default function InstructorQuizManager({ openingId, courseId, lessons }: 
     const removeQuiz = async (quiz: CourseQuiz) => {
         if (!confirm(isAr ? `هل تريد حذف «${quiz.titleAr}»؟` : `Delete "${quiz.titleEn}"?`)) return;
         try {
-            await api.delete(`/quizzes/manage/opening/${openingId}/${quiz.id}`);
+            await api.delete(`${openingEndpoint}/${openingId}/${quiz.id}`);
             setNotice({ text: isAr ? 'تم حذف الاختبار.' : 'Quiz deleted.', error: false });
             await refresh();
         } catch (error) {

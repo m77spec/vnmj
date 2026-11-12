@@ -122,6 +122,10 @@ const EXPECTED_PERMISSIONS: Record<string, [string, string, string][]> = {
         ['POST', '', 'COURSES_WRITE'],
         ['PATCH', ':id', 'COURSES_WRITE'],
         ['DELETE', ':id', 'COURSES_DELETE'],
+        ['GET', 'admin/manage/opening/:openingId', 'CONTENT_READ'],
+        ['POST', 'admin/manage/opening/:openingId', 'CONTENT_WRITE'],
+        ['PATCH', 'admin/manage/opening/:openingId/:id', 'CONTENT_WRITE'],
+        ['DELETE', 'admin/manage/opening/:openingId/:id', 'CONTENT_DELETE'],
     ],
     'src/lms/lessons.controller.ts': [],
     'src/rubrics/rubrics.controller.ts': [
@@ -258,7 +262,7 @@ function classLevelRoles(src: string, consts: Map<string, string[]>): string[] |
 
 test('Phase 4 fixture is wired and fully annotated', () => {
     const total = Object.values(EXPECTED_PERMISSIONS).reduce((sum, rows) => sum + rows.length, 0);
-    assert.equal(total, 95, 'the mixed-surface fixture drifted from the 95 annotated platform routes');
+    assert.equal(total, 99, 'the mixed-surface fixture drifted from the 99 annotated platform routes');
 
     for (const rel of MIXED_CONTROLLERS) {
         const src = readFileSync(join(ROOT, rel), 'utf8');

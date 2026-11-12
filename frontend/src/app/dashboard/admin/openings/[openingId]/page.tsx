@@ -326,11 +326,22 @@ export default function OpeningOversightPage() {
                     />
                     {data && <span className="mt-2 inline-flex rounded-full bg-brand-gold/10 px-3 py-1 text-xs font-black text-brand-gold-dark dark:text-brand-gold-light">{openingStatus}</span>}
                 </div>
-                <button type="button" onClick={refresh} disabled={loading}
-                    className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-brand-navy hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-white dark:hover:bg-white/5">
-                    <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-                    {isAr ? 'تحديث' : 'Refresh'}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                    {data && ['OPEN', 'STARTED'].includes(data.opening.status) && (
+                        <Link
+                            href={`/dashboard/admin/openings/${openingId}/manage`}
+                            className="inline-flex items-center gap-2 rounded-xl bg-brand-gold px-4 py-2.5 text-sm font-black text-brand-navy hover:bg-brand-gold-light"
+                        >
+                            <BookOpen size={16} />
+                            {isAr ? 'إدارة محتوى الدفعة' : 'Manage batch'}
+                        </Link>
+                    )}
+                    <button type="button" onClick={refresh} disabled={loading}
+                        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-brand-navy hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-white dark:hover:bg-white/5">
+                        <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+                        {isAr ? 'تحديث' : 'Refresh'}
+                    </button>
+                </div>
             </div>
 
             {loading && <div className="rounded-2xl border border-gray-100 bg-white p-12 text-center font-bold text-gray-400 dark:border-white/5 dark:bg-brand-navy-dark">{isAr ? 'جارٍ تحميل بيانات الدفعة...' : 'Loading batch data...'}</div>}
