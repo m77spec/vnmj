@@ -250,8 +250,9 @@ export default function CoursePlayer({ courseId }: Props) {
                 if (!active) return;
                 const baseCourse = c.data as CourseData;
                 const incoming = p.data as ProgressData | undefined;
-                const openingModules = incoming?.modules ?? [];
-                const chapters = (baseCourse.chapters || []).map((chapter) => ({
+                const openingModules = [...new Map((incoming?.modules ?? []).map((module) => [module.id, module])).values()];
+                const uniqueChapters = [...new Map((baseCourse.chapters || []).map((chapter) => [chapter.id, chapter])).values()];
+                const chapters = uniqueChapters.map((chapter) => ({
                     ...chapter,
                     modules: openingModules.filter((module) => module.chapterId === chapter.id),
                 }));
@@ -373,7 +374,17 @@ export default function CoursePlayer({ courseId }: Props) {
 
     // ---------- Derived ----------
     const chapters = useMemo<CourseChapter[]>(() => {
-        if (course?.chapters?.length) return course.chapters;
+        if (course?.chapters?.length) {
+            const seenModules = new Set<string>();
+            return course.chapters.map((chapter) => ({
+                ...chapter,
+                modules: (chapter.modules || []).filter((module) => {
+                    if (seenModules.has(module.id)) return false;
+                    seenModules.add(module.id);
+                    return true;
+                }),
+            }));
+        }
         return [{ id: 'root', titleAr: null, titleEn: null, modules: course?.modules || [] }];
     }, [course]);
 

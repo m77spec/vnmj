@@ -78,7 +78,7 @@ export class LessonsService {
         openingContents: openingId ? { where: { openingId } } : false,
       },
     });
-    return modules.flatMap((module) => {
+    const lessons = modules.flatMap((module) => {
       const { openingContents, ...base } = module;
       const override = openingContents?.[0];
       if (override?.isHidden) return [];
@@ -90,6 +90,29 @@ export class LessonsService {
         ...content,
         outcomes: content.outcomes ?? base.outcomes,
       }];
+    });
+    const lessonKey = (lesson: typeof lessons[number]) => [
+      lesson.orderIndex ?? 0,
+      (typeof lesson.titleAr === 'string' ? lesson.titleAr : '').trim().replace(/\s+/g, ' ').toLocaleLowerCase(),
+      (typeof lesson.titleEn === 'string' ? lesson.titleEn : '').trim().replace(/\s+/g, ' ').toLocaleLowerCase(),
+    ].join('|');
+    const chapterLessonKeys = new Set(
+      lessons.filter((lesson) => lesson.chapterId).map(lessonKey),
+    );
+    const seenIds = new Set<string>();
+    const seenLessonKeys = new Set<string>();
+
+    return lessons.filter((lesson) => {
+      if (seenIds.has(lesson.id)) return false;
+      seenIds.add(lesson.id);
+
+      const key = lessonKey(lesson);
+      // Replaced syllabi can leave old root lessons beside their chapter-linked copies.
+      if (!lesson.chapterId && chapterLessonKeys.has(key)) return false;
+      const structuralKey = `${lesson.chapterId || 'root'}|${key}`;
+      if (seenLessonKeys.has(structuralKey)) return false;
+      seenLessonKeys.add(structuralKey);
+      return true;
     });
   }
 
