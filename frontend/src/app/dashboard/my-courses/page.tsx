@@ -13,6 +13,7 @@ interface Enrollment {
     status: string;
     createdAt: string;
     progressPercent?: number | null;
+    learningCompleted?: boolean;
     financeOfficerNotes?: string | null;
     course: {
         id: string;
@@ -61,21 +62,26 @@ interface GradedEnrollment {
     assessments: Assessment[];
 }
 
-type EnrollmentFilter = 'ALL' | 'ACTIVE' | 'PENDING' | 'COMPLETED' | 'REJECTED';
+type EnrollmentFilter = 'ALL' | 'ACTIVE' | 'PENDING' | 'ENDED' | 'COMPLETED' | 'REJECTED';
 
 const enrollmentPriority: Record<EnrollmentFilter, number> = {
     ACTIVE: 0,
     PENDING: 1,
-    COMPLETED: 2,
-    REJECTED: 3,
-    ALL: 4,
+    ENDED: 2,
+    COMPLETED: 3,
+    REJECTED: 4,
+    ALL: 5,
 };
 
-const isCompletedEnrollment = (enrollment: Enrollment) =>
+const hasCompletedLearning = (enrollment: Enrollment) =>
+    enrollment.status === 'APPROVED' && enrollment.learningCompleted === true;
+
+const hasEndedBatch = (enrollment: Enrollment) =>
     enrollment.status === 'APPROVED' && enrollment.opening?.status === 'ENDED';
 
 const enrollmentGroup = (enrollment: Enrollment): EnrollmentFilter => {
-    if (isCompletedEnrollment(enrollment)) return 'COMPLETED';
+    if (hasCompletedLearning(enrollment)) return 'COMPLETED';
+    if (hasEndedBatch(enrollment)) return 'ENDED';
     if (enrollment.status === 'APPROVED') return 'ACTIVE';
     if (enrollment.status === 'REJECTED') return 'REJECTED';
     return 'PENDING';
@@ -89,8 +95,6 @@ export default function MyCoursesPage() {
     const [statusFilter, setStatusFilter] = useState<EnrollmentFilter>('ALL');
 
     const statusLabel = (status: string) => t('statuses.' + (status || '').toLowerCase()) || status;
-
-    const isCompleted = isCompletedEnrollment;
 
     /**
      * A reservation only becomes money owed once the opening is OPEN. This
@@ -124,6 +128,7 @@ export default function MyCoursesPage() {
             ALL: enrollments?.length ?? 0,
             ACTIVE: 0,
             PENDING: 0,
+            ENDED: 0,
             COMPLETED: 0,
             REJECTED: 0,
         };
@@ -155,7 +160,7 @@ export default function MyCoursesPage() {
             });
     }, [enrollments, locale, pick, searchQuery, statusFilter]);
 
-    const filters: EnrollmentFilter[] = ['ALL', 'ACTIVE', 'PENDING', 'COMPLETED', 'REJECTED'];
+    const filters: EnrollmentFilter[] = ['ALL', 'ACTIVE', 'PENDING', 'ENDED', 'COMPLETED', 'REJECTED'];
 
     return (
         <ProtectedRoute allowedRoles={['STUDENT']}>
@@ -202,10 +207,11 @@ export default function MyCoursesPage() {
                     <>
                     {filterCounts.ALL > 0 && (
                         <div className="mb-6 space-y-4">
-                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                                 {([
                                     { key: 'ACTIVE', icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
                                     { key: 'PENDING', icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+                                    { key: 'ENDED', icon: CalendarClock, color: 'text-gray-500', bg: 'bg-gray-500/10' },
                                     { key: 'COMPLETED', icon: Award, color: 'text-violet-500', bg: 'bg-violet-500/10' },
                                 ] as const).map(item => (
                                     <div key={item.key} className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/5 dark:bg-white/[0.03]">
@@ -290,16 +296,19 @@ export default function MyCoursesPage() {
                                         </div>
                                         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                                             <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold ${
-                                                isCompleted(enrollment) ? 'border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300' :
+                                                hasCompletedLearning(enrollment) ? 'border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300' :
+                                                hasEndedBatch(enrollment) ? 'border-gray-500/20 bg-gray-500/10 text-gray-700 dark:text-gray-300' :
                                                 enrollment.status === 'APPROVED' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' :
                                                 enrollment.status === 'REJECTED' ? 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300' :
                                                 enrollment.status === 'RESERVED' ? 'border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300' :
                                                 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300'
                                             }`}>
-                                                {isCompleted(enrollment) ? <Award size={13} /> :
+                                                {hasCompletedLearning(enrollment) ? <Award size={13} /> :
+                                                    hasEndedBatch(enrollment) ? <CalendarClock size={13} /> :
                                                     enrollment.status === 'APPROVED' ? <CheckCircle size={13} /> :
                                                         enrollment.status === 'REJECTED' ? <XCircle size={13} /> : <Clock size={13} />}
-                                                {isCompleted(enrollment) ? t('statuses.completed') : statusLabel(enrollment.status)}
+                                                {hasCompletedLearning(enrollment) ? t('statuses.completed') :
+                                                    hasEndedBatch(enrollment) ? t('myCourses.filter_ended') : statusLabel(enrollment.status)}
                                             </span>
                                             {enrollment.opening?.status === 'ANNOUNCEMENT' && (
                                                 <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-gold/40 bg-brand-gold/15 px-3 py-1.5 text-xs font-black text-brand-navy dark:text-brand-gold-light">
@@ -394,11 +403,20 @@ export default function MyCoursesPage() {
                                         </div>
                                     )}
                                     <div className="mt-auto space-y-2 border-t border-gray-200 pt-4 dark:border-white/10">
-                                        {isCompleted(enrollment) ? (
+                                        {hasCompletedLearning(enrollment) && enrollment.opening?.status === 'ENDED' ? (
                                             <>
                                                 <Link href={`/dashboard/profile?tab=certificates&courseId=${enrollment.course.id}`} className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-gold to-brand-gold-light px-4 py-3 text-sm font-black text-brand-navy-dark transition hover:shadow-md">
                                                     <Award size={15} /> {t('myCourses.view_certificate')}
                                                 </Link>
+                                                <Link href="/dashboard/my-grades" className="flex w-full items-center justify-center rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-brand-navy transition hover:border-brand-gold/50 dark:border-white/10 dark:text-white">
+                                                    {t('myCourses.view_grades')}
+                                                </Link>
+                                            </>
+                                        ) : hasCompletedLearning(enrollment) ? (
+                                            <>
+                                                <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-3 text-center text-xs font-semibold text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+                                                    {t('myCourses.learning_completed')}
+                                                </p>
                                                 <Link href="/dashboard/my-grades" className="flex w-full items-center justify-center rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-brand-navy transition hover:border-brand-gold/50 dark:border-white/10 dark:text-white">
                                                     {t('myCourses.view_grades')}
                                                 </Link>

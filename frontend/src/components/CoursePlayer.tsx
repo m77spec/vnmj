@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type RefObject } from 'react';
 import { useRouter } from 'next/navigation';
+import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
 import { api, API_BASE_URL, getErrorMessage } from '@/lib/api';
 import { useI18n } from '@/lib/i18n-context';
@@ -195,6 +196,11 @@ export default function CoursePlayer({ courseId }: Props) {
     const [tasks, setTasks] = useState<LessonTask[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const [loadErrorKind, setLoadErrorKind] = useState<'enrollment' | 'general'>('general');
+    const [tasksError, setTasksError] = useState<string | null>(null);
+    const [quizzesError, setQuizzesError] = useState<string | null>(null);
+    const [tasksRetrying, setTasksRetrying] = useState(false);
+    const [quizzesRetrying, setQuizzesRetrying] = useState(false);
 
     const [focusMode, setFocusMode] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -233,6 +239,9 @@ export default function CoursePlayer({ courseId }: Props) {
         (async () => {
             setLoading(true);
             setLoadError(null);
+            setLoadErrorKind('general');
+            setTasksError(null);
+            setQuizzesError(null);
             try {
                 const [c, p] = await Promise.all([
                     api.get(`/courses/${courseId}`),
@@ -286,9 +295,15 @@ export default function CoursePlayer({ courseId }: Props) {
                 // a batch, so this must not sit behind an openingId check.
                 try {
                     const tr = await api.get(`/tasks/course/${courseId}`);
-                    if (active) setTasks(tr.data || []);
-                } catch {
-                    if (active) setTasks([]);
+                    if (active) {
+                        setTasks(tr.data || []);
+                        setTasksError(null);
+                    }
+                } catch (error) {
+                    if (active) {
+                        setTasks([]);
+                        setTasksError(getErrorMessage(error) || t('player.tasks_load_failed'));
+                    }
                 }
                 if (p.data?.openingId) {
                     try {
@@ -304,9 +319,15 @@ export default function CoursePlayer({ courseId }: Props) {
                     const qr = await api.get(`/quizzes/course/${courseId}`, {
                         params: incoming?.openingId ? { openingId: incoming.openingId } : undefined,
                     });
-                    if (active) setModuleQuizzes(qr.data || []);
-                } catch {
-                    if (active) setModuleQuizzes([]);
+                    if (active) {
+                        setModuleQuizzes(qr.data || []);
+                        setQuizzesError(null);
+                    }
+                } catch (error) {
+                    if (active) {
+                        setModuleQuizzes([]);
+                        setQuizzesError(getErrorMessage(error) || t('player.quizzes_load_failed'));
+                    }
                 }
                 const mods = openingModules;
                 if (mods.length > 0) {
@@ -317,7 +338,10 @@ export default function CoursePlayer({ courseId }: Props) {
                     setSelectedId(firstIncomplete.id);
                 }
             } catch (e) {
-                if (active) setLoadError(getErrorMessage(e) || t('player.load_failed'));
+                if (active) {
+                    setLoadErrorKind(axios.isAxiosError(e) && e.response?.status === 403 ? 'enrollment' : 'general');
+                    setLoadError(getErrorMessage(e) || t('player.load_failed'));
+                }
             } finally {
                 if (active) setLoading(false);
             }
@@ -489,12 +513,45 @@ export default function CoursePlayer({ courseId }: Props) {
             toast.success(t('player.task_submitted'));
             setTaskDraft('');
             setTaskFile(null);
-            const tr = await api.get(`/tasks/course/${courseId}`);
-            setTasks(tr.data || []);
+            try {
+                const tr = await api.get(`/tasks/course/${courseId}`);
+                setTasks(tr.data || []);
+                setTasksError(null);
+            } catch (error) {
+                setTasksError(getErrorMessage(error) || t('player.tasks_load_failed'));
+            }
         } catch (e) {
             toast.error(getErrorMessage(e) || t('player.task_fail'));
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    const retryTasks = async () => {
+        setTasksRetrying(true);
+        setTasksError(null);
+        try {
+            const response = await api.get(`/tasks/course/${courseId}`);
+            setTasks(response.data || []);
+        } catch (error) {
+            setTasksError(getErrorMessage(error) || t('player.tasks_load_failed'));
+        } finally {
+            setTasksRetrying(false);
+        }
+    };
+
+    const retryQuizzes = async () => {
+        setQuizzesRetrying(true);
+        setQuizzesError(null);
+        try {
+            const response = await api.get(`/quizzes/course/${courseId}`, {
+                params: progress?.openingId ? { openingId: progress.openingId } : undefined,
+            });
+            setModuleQuizzes(response.data || []);
+        } catch (error) {
+            setQuizzesError(getErrorMessage(error) || t('player.quizzes_load_failed'));
+        } finally {
+            setQuizzesRetrying(false);
         }
     };
 
@@ -834,7 +891,15 @@ export default function CoursePlayer({ courseId }: Props) {
                     )}
                     {deckTab === 'quizzes' && progress?.enrollmentId && (
                         <div className="space-y-4">
-                            {moduleQuizzes.filter((q) => q.moduleId === selected?.id).length === 0 ? (
+                            {quizzesError ? (
+                                <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">
+                                    <p>{quizzesError}</p>
+                                    <button type="button" onClick={retryQuizzes} disabled={quizzesRetrying} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-current px-3 py-1.5 font-bold hover:bg-red-500/10 disabled:opacity-60">
+                                        {quizzesRetrying && <Loader size={14} className="animate-spin" />}
+                                        {quizzesRetrying ? t('player.retrying') : t('player.retry')}
+                                    </button>
+                                </div>
+                            ) : moduleQuizzes.filter((q) => q.moduleId === selected?.id).length === 0 ? (
                                 <p className="text-sm text-ink-subtle text-center py-8">{isAr ? 'لا يوجد اختبارات لهذا الدرس بعد' : 'No quizzes for this lesson yet'}</p>
                             ) : (
                                 moduleQuizzes.filter((q) => q.moduleId === selected?.id).map((quiz) => (
@@ -897,11 +962,18 @@ export default function CoursePlayer({ courseId }: Props) {
         return (
             <div className="h-[60vh] flex flex-col items-center justify-center text-center gap-3 bg-surface-sunken">
                 <BookMarked size={44} className="text-accent" />
-                <p className="text-lg font-bold text-ink">{t('player.not_enrolled_title')}</p>
+                <p className="text-lg font-bold text-ink">
+                    {loadErrorKind === 'enrollment' ? t('player.not_enrolled_title') : t('player.load_error_title')}
+                </p>
                 <p className="text-sm text-ink-subtle max-w-md">{loadError}</p>
-                <button onClick={() => router.push(`/courses/${courseId}`)} className="bg-gradient-to-r from-brand-gold to-brand-gold-dark text-black px-6 py-3 rounded-xl font-black hover:shadow-lg hover:shadow-brand-gold/20 transition-all duration-300">
-                    {t('player.go_to_course')}
-                </button>
+                <div className="flex flex-wrap justify-center gap-3">
+                    <button onClick={() => window.location.reload()} className="bg-gradient-to-r from-brand-gold to-brand-gold-dark text-black px-6 py-3 rounded-xl font-black hover:shadow-lg hover:shadow-brand-gold/20 transition-all duration-300">
+                        {t('player.retry')}
+                    </button>
+                    <button onClick={() => router.push(loadErrorKind === 'enrollment' ? `/courses/${courseId}` : '/dashboard/my-courses')} className="rounded-xl border border-line px-6 py-3 font-bold text-ink hover:bg-ink/[0.04]">
+                        {loadErrorKind === 'enrollment' ? t('player.go_to_course') : t('player.back')}
+                    </button>
+                </div>
             </div>
         );
     }
@@ -1109,6 +1181,15 @@ export default function CoursePlayer({ courseId }: Props) {
                             ))}
                         </select>
                     </div>
+                    {tasksError && (
+                        <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">
+                            <span>{tasksError}</span>
+                            <button type="button" onClick={retryTasks} disabled={tasksRetrying} className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-current px-3 py-1.5 font-bold hover:bg-red-500/10 disabled:opacity-60">
+                                {tasksRetrying && <Loader size={14} className="animate-spin" />}
+                                {tasksRetrying ? t('player.retrying') : t('player.retry')}
+                            </button>
+                        </div>
+                    )}
                     <motion.div layout className="space-y-4 min-h-[300px]">
                         {renderStage()}
                         {renderDeck()}
@@ -1503,10 +1584,9 @@ function NotesEditor({ initial, moduleId, onSave }: {
         setStatus('idle');
         if (timer.current) clearTimeout(timer.current);
         timer.current = setTimeout(async () => {
-            if (!v.trim()) return;
             setStatus('saving');
             try {
-                await onSave(v, moduleId);
+                await onSave(v.trim(), moduleId);
                 setStatus('saved');
             } catch {
                 setStatus('error');

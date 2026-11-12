@@ -251,6 +251,7 @@ export class EnrollmentsService {
                     },
                 },
                 _count: { select: { lessonProgress: true } },
+                courseEvaluation: { select: { id: true } },
             },
             orderBy: { createdAt: 'desc' },
         });
@@ -260,11 +261,13 @@ export class EnrollmentsService {
             const done = e._count.lessonProgress;
             const classroom = this.classroomFor(e);
             const { meetLink: _rawLink, liveSessions: _rawSessions, ...opening } = e.opening ?? {};
+            const { courseEvaluation, ...enrollment } = e;
             return {
-                ...e,
+                ...enrollment,
                 opening: e.opening ? opening : e.opening,
                 meetLink: classroom.meetLink,
                 liveSessions: classroom.liveSessions,
+                learningCompleted: Boolean(courseEvaluation),
                 progressPercent: total === 0
                     ? null
                     : Math.min(100, Math.round((done / total) * 100)),
