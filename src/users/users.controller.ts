@@ -148,6 +148,22 @@ export class UsersController {
         return this.usersService.update(id, dto, req.user.userId, ip);
     }
 
+    @ApiOperation({ summary: 'Control whether an instructor appears in the public instructors directory' })
+    @Roles(Role.ADMIN)
+    @RequirePermissions(PERMISSIONS.USERS_WRITE)
+    @Patch(':id/public-instructors-page')
+    setPublicInstructorVisibility(
+        @Param('id') id: string,
+        @Body('visible') visible: boolean,
+        @Request() req: any,
+        @Ip() ip: string
+    ) {
+        if (typeof visible !== 'boolean') {
+            throw new BadRequestException('visible must be a boolean');
+        }
+        return this.usersService.setPublicInstructorVisibility(id, visible, req.user.userId, ip);
+    }
+
     @ApiOperation({ summary: 'Change user role (Admin only)' })
     @ApiResponse({ status: 200, description: 'User role updated.' })
     @Roles(Role.ADMIN)

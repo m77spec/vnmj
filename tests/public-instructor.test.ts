@@ -170,4 +170,19 @@ describe('public instructor visibility predicate', () => {
         assert.deepEqual(courseLink, { coursesTaught: { some: { openings: { some: { isPublished: true } } } } });
         assert.deepEqual(openingLink, { openingsTaught: { some: { isPublished: true } } });
     });
+
+    test('the browse list excludes instructors explicitly hidden by an admin', () => {
+        const where = publicInstructorWhere(true);
+        assert.deepEqual(where.NOT, {
+            metadata: {
+                path: ['showOnInstructorsPage'],
+                equals: false,
+            },
+        });
+    });
+
+    test('instructor profile links remain available when the browse list is not being queried', () => {
+        const where = publicInstructorWhere(false);
+        assert.equal(where.NOT, undefined);
+    });
 });

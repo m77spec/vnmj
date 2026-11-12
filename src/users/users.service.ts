@@ -579,6 +579,33 @@ export class UsersService {
         return updated;
     }
 
+    async setPublicInstructorVisibility(id: string, visible: boolean, adminId: string, ip?: string) {
+        const existing = await this.prisma.user.findUnique({
+            where: { id },
+            select: { id: true, email: true, role: true, metadata: true },
+        });
+        if (!existing) throw new NotFoundException('User not found');
+        if (existing.role !== Role.INSTRUCTOR) {
+            throw new BadRequestException('Only instructor accounts can be listed in the public instructors directory');
+        }
+
+        const metadata = (existing.metadata ?? {}) as Record<string, unknown>;
+        const user = await this.prisma.user.update({
+            where: { id },
+            data: {
+                metadata: { ...metadata, showOnInstructorsPage: visible } as Prisma.InputJsonObject,
+            },
+            select: { id: true, email: true, role: true, metadata: true },
+        });
+
+        await this.audit.logAction(
+            `ADMIN ${adminId} ${visible ? 'listed' : 'hid'} instructor ${id} (${existing.email}) ${visible ? 'on' : 'from'} the public instructors page`,
+            ip,
+            adminId,
+        );
+        return { id: user.id, showOnInstructorsPage: visible };
+    }
+
     async disableUserTwoFactor(id: string, adminId: string, ip?: string) {
         const existing = await this.prisma.user.findUnique({
             where: { id },

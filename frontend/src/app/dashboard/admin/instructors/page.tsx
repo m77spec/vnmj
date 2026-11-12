@@ -5,7 +5,7 @@ import { api, getErrorMessage, downloadProtectedFile } from '@/lib/api';
 import { useI18n } from '@/lib/i18n-context';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { Check, X, FileText, Link as LinkIcon, Search, Pause, Play, GraduationCap } from 'lucide-react';
+import { Check, X, FileText, Link as LinkIcon, Search, Pause, Play, GraduationCap, Eye, EyeOff } from 'lucide-react';
 import { PageHeader, Badge, EmptyState, EmptyPanel, SectionHeader, type Tone } from '../components';
 
 interface Application {
@@ -25,6 +25,35 @@ interface User {
     role: string;
     isActive: boolean;
     createdAt: string;
+    metadata?: Record<string, unknown> | null;
+}
+
+function instructorProfileStatus(metadata: User['metadata']) {
+    const meta = metadata ?? {};
+    const profile = meta.publicProfile && typeof meta.publicProfile === 'object'
+        ? meta.publicProfile as Record<string, unknown>
+        : {};
+    const name = profile.name && typeof profile.name === 'object'
+        ? profile.name as Record<string, unknown>
+        : {};
+    const jobTitle = profile.jobTitle && typeof profile.jobTitle === 'object'
+        ? profile.jobTitle as Record<string, unknown>
+        : {};
+    const hasText = (value: unknown) => typeof value === 'string' && value.trim().length > 0;
+    const hasIdentity = [name.ar, name.en, meta.nameAr, meta.nameEn].some(hasText);
+    const hasTitle = [jobTitle.ar, jobTitle.en, meta.jobTitleAr, meta.jobTitleEn].some(hasText);
+    const bio = profile.bio && typeof profile.bio === 'object'
+        ? profile.bio as Record<string, unknown>
+        : {};
+    const hasBio = [bio.ar, bio.en, meta.bio, meta.bioEn].some(hasText);
+    const experiences = Array.isArray(profile.experiences) ? profile.experiences : [];
+    const qualifications = Array.isArray(profile.qualifications) ? profile.qualifications : [];
+    const hasExperience = experiences.length + qualifications.length > 0;
+
+    return {
+        complete: hasIdentity && hasTitle,
+        steps: [hasIdentity, hasTitle, hasBio, hasExperience].filter(Boolean).length,
+    };
 }
 
 const appTone: Record<string, Tone> = {
@@ -72,6 +101,20 @@ export default function AdminInstructorsPage() {
             toast.error(getErrorMessage(err) || t('admin.toggle_status_fail'));
         }
         setIsProcessing(null);
+    };
+
+    const handleTogglePublicVisibility = async (u: User) => {
+        const visible = (u.metadata?.showOnInstructorsPage as boolean | undefined) !== false;
+        setIsProcessing(u.id);
+        try {
+            await api.patch(`/users/${u.id}/public-instructors-page`, { visible: !visible });
+            toast.success(!visible ? t('admin.instructor_public_enabled') : t('admin.instructor_public_disabled'));
+            refetchUsers();
+        } catch (err) {
+            toast.error(getErrorMessage(err) || t('admin.instructor_visibility_failed'));
+        } finally {
+            setIsProcessing(null);
+        }
     };
 
     const handleDelete = async (u: User) => {
@@ -206,6 +249,8 @@ export default function AdminInstructorsPage() {
                             <thead>
                                 <tr>
                                     <th>{t('admin.col_email')}</th>
+                                    <th>{t('admin.instructor_profile_completion')}</th>
+                                    <th>{t('admin.instructor_public_visibility')}</th>
                                     <th>{t('admin.col_status')}</th>
                                     <th>{t('admin.col_joined')}</th>
                                     <th className="text-right">{t('admin.col_admin_actions')}</th>
@@ -215,6 +260,42 @@ export default function AdminInstructorsPage() {
                                 {filteredInstructors.map(u => (
                                     <tr key={u.id} className={`animate-fade-in hover:bg-gray-100 dark:hover:bg-white/5 ${u.isActive === false ? 'opacity-60' : ''}`}>
                                         <td className="p-4 font-bold text-brand-navy dark:text-gray-200">{u.email}</td>
+                                        <td className="p-4">
+                                            {(() => {
+                                                const status = instructorProfileStatus(u.metadata);
+                                                return (
+                                                    <div className="space-y-1">
+                                                        <Badge tone={status.complete ? 'green' : 'amber'} dot>
+                                                            {status.complete ? t('admin.instructor_profile_complete') : t('admin.instructor_profile_incomplete')}
+                                                        </Badge>
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                            {status.steps}/4 {t('admin.instructor_profile_steps')}
+                                                        </p>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </td>
+                                        <td className="p-4">
+                                            {(() => {
+                                                const visible = (u.metadata?.showOnInstructorsPage as boolean | undefined) !== false;
+                                                return (
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge tone={visible ? 'green' : 'gray'} dot>
+                                                            {visible ? t('admin.instructor_public_visible') : t('admin.instructor_public_hidden')}
+                                                        </Badge>
+                                                        <button
+                                                            onClick={() => handleTogglePublicVisibility(u)}
+                                                            disabled={isProcessing === u.id}
+                                                            aria-label={visible ? t('admin.instructor_public_hide_action') : t('admin.instructor_public_show_action')}
+                                                            title={visible ? t('admin.instructor_public_hide_action') : t('admin.instructor_public_show_action')}
+                                                            className={`admin-action-btn disabled:opacity-40 ${visible ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500 dark:hover:text-white'}`}
+                                                        >
+                                                            {visible ? <EyeOff size={17} /> : <Eye size={17} />}
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </td>
                                         <td className="p-4">
                                             <Badge tone={u.isActive === false ? 'red' : 'green'} dot>
                                                 {u.isActive === false ? t('admin.status_suspended') : t('admin.status_active')}

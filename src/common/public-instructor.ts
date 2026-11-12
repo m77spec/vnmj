@@ -198,6 +198,16 @@ export function publicInstructorWhere(publishedOnly = false): Prisma.UserWhereIn
 
     return {
         isActive: true,
+        ...(publishedOnly
+            ? {
+                  NOT: {
+                      metadata: {
+                          path: ['showOnInstructorsPage'],
+                          equals: false,
+                      },
+                  },
+              }
+            : {}),
         OR: [
             { role: { in: [Role.INSTRUCTOR, Role.COURSE_MANAGER] } },
             courseLink,
