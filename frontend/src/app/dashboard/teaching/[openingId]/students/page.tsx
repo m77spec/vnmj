@@ -19,11 +19,6 @@ interface MyOpening {
     course: { id: string; titleAr?: string | null; titleEn?: string | null };
 }
 
-interface Assessment {
-    id: string;
-    maxScore: number;
-}
-
 interface EnrollmentRow {
     id: string;
     status: string;
@@ -36,10 +31,10 @@ interface EnrollmentRow {
         nameEn?: string | null;
     };
     grades: { assessmentId: string; score: number }[];
+    progressPercent?: number | null;
 }
 
 interface RosterData {
-    assessments?: Assessment[] | null;
     enrollments?: EnrollmentRow[] | null;
 }
 
@@ -86,7 +81,7 @@ export default function OpeningStudentsPage() {
     const isAr = locale === 'ar';
     const [search, setSearch] = useState('');
 
-    const { data: openings } = useFetchData<MyOpening[]>('/openings/mine');
+    const { data: openings, error: openingsError } = useFetchData<MyOpening[]>('/openings/mine');
     const { data: roster, loading, error } = useFetchData<RosterData>(oid ? `/openings/${oid}/roster` : null);
 
     const opening = (openings || []).find((o) => o.id === oid);
@@ -97,33 +92,30 @@ export default function OpeningStudentsPage() {
         return names.find((name) => name?.trim())?.trim() || '';
     };
 
-    const rows = useMemo(() => {
+    const allRows = useMemo(() => {
         const enrollments = roster?.enrollments || [];
-        const assessments = roster?.assessments || [];
-        const totalMax = assessments.reduce((s, a) => s + (a.maxScore ?? 0), 0);
-        const q = search.trim().toLocaleLowerCase(locale);
-        return enrollments
-            .filter((e) => !q || [
-                e.student.email,
-                e.student.name,
-                e.student.nameAr,
-                e.student.nameEn,
-            ].some((value) => value?.toLocaleLowerCase(locale).includes(q)))
-            .map((e) => {
-                if (!totalMax) return { ...e, progress: null as number | null };
-                const earned = assessments.reduce((sum, a) => {
-                    const g = e.grades.find((gr) => gr.assessmentId === a.id);
-                    return sum + (g ? g.score : 0);
-                }, 0);
-                return { ...e, progress: Math.min(100, Math.round((earned / totalMax) * 100)) };
-            });
-    }, [roster, search, locale]);
+        return enrollments.map((enrollment) => ({
+            ...enrollment,
+            progress: enrollment.progressPercent ?? null,
+        }));
+    }, [roster]);
 
-    const approvedCount = rows.filter((r) => r.status === 'APPROVED').length;
-    const progressValues = rows.map((r) => r.progress).filter((p): p is number => p != null);
+    const rows = useMemo(() => {
+        const q = search.trim().toLocaleLowerCase(locale);
+        return allRows.filter((enrollment) => !q || [
+            enrollment.student.email,
+            enrollment.student.name,
+            enrollment.student.nameAr,
+            enrollment.student.nameEn,
+        ].some((value) => value?.toLocaleLowerCase(locale).includes(q)));
+    }, [allRows, search, locale]);
+
+    const approvedCount = allRows.filter((r) => r.status === 'APPROVED').length;
+    const progressValues = allRows.map((r) => r.progress).filter((p): p is number => p != null);
     const avgProgress = progressValues.length
         ? Math.round(progressValues.reduce((s, p) => s + p, 0) / progressValues.length)
         : null;
+    const enrollmentCount = roster?.enrollments?.length;
 
     const fmtDate = (d?: string | null) =>
         d ? new Date(d).toLocaleDateString(isAr ? 'ar-SA' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
@@ -145,17 +137,19 @@ export default function OpeningStudentsPage() {
                             ? `${pick(opening, 'name') || (isAr ? 'دفعة بدون عنوان' : 'Untitled Batch')} · ${pick(opening.course, 'title')}`
                             : undefined
                     }
-                    actions={<Badge tone="gold"><Users size={13} /> {(roster?.enrollments || []).length} {isAr ? 'طالب' : 'Students'}</Badge>}
+                    actions={<Badge tone="gold"><Users size={13} /> {enrollmentCount ?? '—'} {isAr ? 'طالب' : 'Students'}</Badge>}
                 />
 
-                {error && (
-                    <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl">{error}</div>
+                {(error || openingsError) && (
+                    <div role="alert" className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl">
+                        {error || openingsError}
+                    </div>
                 )}
 
                 <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                     {[
-                        { icon: Users, label: isAr ? 'إجمالي الطلاب' : 'Total Students', value: (roster?.enrollments || []).length, color: 'text-brand-navy-light', bg: 'bg-brand-navy-light/10' },
-                        { icon: UserCheck, label: isAr ? 'مقبولون' : 'Approved', value: approvedCount, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+                        { icon: Users, label: isAr ? 'إجمالي الطلاب' : 'Total Students', value: enrollmentCount ?? '—', color: 'text-brand-navy-light', bg: 'bg-brand-navy-light/10' },
+                        { icon: UserCheck, label: isAr ? 'مقبولون' : 'Approved', value: roster ? approvedCount : '—', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
                         { icon: TrendingUp, label: isAr ? 'متوسط التقدم' : 'Avg Progress', value: avgProgress != null ? `${avgProgress}%` : '—', color: 'text-brand-gold-light', bg: 'bg-brand-gold/10' },
                     ].map((s, i) => (
                         <div key={i} className="min-w-0 bg-brand-navy-dark border border-white/5 rounded-2xl p-3 sm:p-5 hover:border-white/10 transition-all">
@@ -197,6 +191,10 @@ export default function OpeningStudentsPage() {
                             <div className="p-10 text-center text-gray-400">
                                 <Loader className="animate-spin mx-auto mb-3" size={24} />
                                 {isAr ? 'جاري التحميل...' : 'Loading...'}
+                            </div>
+                        ) : error ? (
+                            <div role="alert" className="p-8 text-center text-sm font-semibold text-red-400">
+                                {isAr ? 'تعذر تحميل قائمة الطلاب.' : 'Could not load the student roster.'}
                             </div>
                         ) : rows.length === 0 ? (
                             <div className="p-8 text-center text-sm font-semibold text-gray-400">
@@ -250,6 +248,12 @@ export default function OpeningStudentsPage() {
                                         <td colSpan={99} className="p-12 text-center text-gray-400">
                                             <Loader className="animate-spin mx-auto mb-3" size={24} />
                                             {isAr ? 'جاري التحميل...' : 'Loading...'}
+                                        </td>
+                                    </tr>
+                                ) : error ? (
+                                    <tr>
+                                        <td colSpan={99} role="alert" className="p-12 text-center text-sm font-semibold text-red-400">
+                                            {isAr ? 'تعذر تحميل قائمة الطلاب.' : 'Could not load the student roster.'}
                                         </td>
                                     </tr>
                                 ) : rows.length === 0 ? (

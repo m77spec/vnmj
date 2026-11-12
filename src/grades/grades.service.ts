@@ -44,7 +44,7 @@ export class GradesService {
         const opening = await this.getOpeningOrThrow(openingId);
         await this.assertCanManageOpening(openingId, actorId, actorRole);
 
-        const [assessments, enrollments] = await Promise.all([
+        const [assessments, enrollments, modules] = await Promise.all([
             this.prisma.assessment.findMany({
                 where: { openingId },
                 orderBy: { orderIndex: 'asc' },
@@ -54,10 +54,28 @@ export class GradesService {
                 include: {
                     student: { select: { id: true, email: true, metadata: true } },
                     grades: { select: { assessmentId: true, score: true, notes: true } },
+                    lessonProgress: { select: { moduleId: true } },
                 },
                 orderBy: { createdAt: 'asc' },
             }),
+            this.prisma.module.findMany({
+                where: {
+                    courseId: opening.course.id,
+                    OR: [{ openingId: null }, { openingId }],
+                },
+                select: {
+                    id: true,
+                    openingContents: openingId
+                        ? { where: { openingId }, select: { isHidden: true } }
+                        : false,
+                },
+            }),
         ]);
+        const visibleModuleIds = new Set(
+            modules
+                .filter((module) => !module.openingContents?.[0]?.isHidden)
+                .map((module) => module.id),
+        );
 
         return {
             opening: {
@@ -83,13 +101,18 @@ export class GradesService {
                 const nameAr = typeof studentMetadata.nameAr === 'string' ? studentMetadata.nameAr.trim() : '';
                 const nameEn = typeof studentMetadata.nameEn === 'string' ? studentMetadata.nameEn.trim() : '';
                 const { metadata: _metadata, ...student } = enrollment.student;
+                const { lessonProgress, ...enrollmentData } = enrollment;
+                const completedModuleCount = lessonProgress.filter(({ moduleId }) => visibleModuleIds.has(moduleId)).length;
                 return {
-                    ...enrollment,
+                    ...enrollmentData,
                     student: {
                         ...student,
                         nameAr: nameAr || fullName || null,
                         nameEn: nameEn || fullName || null,
                     },
+                    progressPercent: enrollment.status !== 'APPROVED' || visibleModuleIds.size === 0
+                        ? null
+                        : Math.min(100, Math.round((completedModuleCount / visibleModuleIds.size) * 100)),
                 };
             }),
         };

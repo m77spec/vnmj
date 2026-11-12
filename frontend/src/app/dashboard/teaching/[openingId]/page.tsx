@@ -14,7 +14,7 @@ import InstructorAnnouncements from '@/components/InstructorAnnouncements';
 import AcademicCalendar from '@/components/AcademicCalendar';
 import LiveSessionManager from '@/components/LiveSessionManager';
 import InstructorQuizManager from '@/components/InstructorQuizManager';
-import { Settings2, ClipboardList, MessagesSquare, BarChart3, Flag, Users, BookOpen, Hash, ArrowLeft, Megaphone, Calendar, Video, Pencil } from 'lucide-react';
+import { Settings2, ClipboardList, MessagesSquare, BarChart3, Flag, Users, BookOpen, Hash, ArrowLeft, Megaphone, Calendar, Video, Pencil, Loader } from 'lucide-react';
 import OpeningContentEditor from '@/components/OpeningContentEditor';
 
 interface MyOpening {
@@ -118,7 +118,7 @@ export default function TeachingWorkspacePage() {
         router.push(`/dashboard/teaching/${openingId}?tab=${key}`, { scroll: false });
     };
 
-    const { data: openings } = useFetchData<MyOpening[]>('/openings/mine');
+    const { data: openings, loading: openingsLoading, error: openingsError, refetch: refetchOpenings } = useFetchData<MyOpening[]>('/openings/mine');
     const opening = (openings || []).find((o) => o.id === openingId);
     const { data: rosterData } = useFetchData<RosterData>(
         opening?.access.canGrade ? `/openings/${openingId}/roster` : null,
@@ -147,7 +147,7 @@ export default function TeachingWorkspacePage() {
         ...(opening.access.canReadContent ? ['content' as const] : []),
         ...(canManageQuizzes ? ['quizzes' as const] : []),
         ...(opening.access.canViewAnalytics ? ['analytics' as const] : []),
-    ] : VALID_TABS;
+    ] : [];
     const tab: Tab = availableTabs.includes(requestedTab)
         ? requestedTab
         : (availableTabs[0] ?? 'roster');
@@ -248,6 +248,31 @@ export default function TeachingWorkspacePage() {
                     <ArrowLeft size={16} /> {isAr ? 'العودة لمركز التدريس' : 'Back to Teaching Hub'}
                 </Link>
 
+                {openingsLoading ? (
+                    <div role="status" className="flex items-center justify-center gap-3 rounded-2xl border border-white/5 bg-brand-navy-dark p-10 text-gray-300">
+                        <Loader className="animate-spin text-brand-gold-light" size={22} />
+                        {isAr ? 'جارٍ تحميل مساحة التدريس...' : 'Loading teaching workspace...'}
+                    </div>
+                ) : openingsError ? (
+                    <div role="alert" className="space-y-4 rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-red-300">
+                        <p>{openingsError}</p>
+                        <button
+                            type="button"
+                            onClick={() => void refetchOpenings()}
+                            className="rounded-xl bg-red-500/15 px-4 py-2 text-sm font-bold hover:bg-red-500/25"
+                        >
+                            {isAr ? 'إعادة المحاولة' : 'Try again'}
+                        </button>
+                    </div>
+                ) : !opening ? (
+                    <div role="alert" className="space-y-4 rounded-2xl border border-white/5 bg-brand-navy-dark p-5 text-gray-300">
+                        <p>{isAr ? 'لم نعثر على هذه الدفعة أو لا تملك صلاحية الوصول إليها.' : 'This opening was not found or you do not have access to it.'}</p>
+                        <Link href="/dashboard/teaching" className="inline-flex rounded-xl bg-brand-gold/10 px-4 py-2 text-sm font-bold text-brand-gold-light hover:bg-brand-gold/20">
+                            {isAr ? 'العودة إلى مركز التدريس' : 'Back to Teaching Hub'}
+                        </Link>
+                    </div>
+                ) : (
+                    <>
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                         <div className="flex items-center gap-3 flex-wrap">
@@ -388,6 +413,8 @@ export default function TeachingWorkspacePage() {
                             <p className="text-2xl sm:text-3xl font-black text-white">{openingReport?.needsFollowUpCount ?? '—'}</p>
                         </div>
                     </div>
+                )}
+                    </>
                 )}
             </div>
         </ProtectedRoute>
