@@ -1269,6 +1269,7 @@ export default function CoursePlayer({ courseId }: Props) {
                         {needsCourseEvaluation && (
                             <CourseEvaluationForm
                                 courseId={courseId}
+                                form={evaluation?.form ?? null}
                                 onSubmitted={(status) => setEvaluation((current) => current ? { ...current, ...status } : null)}
                             />
                         )}

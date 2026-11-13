@@ -168,6 +168,20 @@ enum AttendanceStatus {
   EXCUSED
 }
 
+enum CourseEvaluationQuestionType {
+  RATING
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TEXT
+  YES_NO
+}
+
+enum CourseEvaluationMetric {
+  COURSE
+  INSTRUCTOR
+  GENERAL
+}
+
 model User {
   id                 String    @id @default(uuid())
   email              String    @unique
@@ -322,6 +336,7 @@ model Course {
   directChats         DirectChat[]
   instructorRatings   InstructorRating[]
   evaluations         CourseEvaluation[]
+  evaluationForm      CourseEvaluationForm?
   learningPathCourses LearningPathCourse[]
   learningSessions    LearningSession[]
   refundRequests      RefundRequest[]
@@ -1830,10 +1845,11 @@ model InstructorRating {
 
 model CourseEvaluation {
   id               String   @id @default(uuid())
-  courseRating     Int
-  instructorRating Int
+  courseRating     Int?
+  instructorRating Int?
   commentAr        String?  @db.Text
   commentEn        String?  @db.Text
+  answers          Json?
   createdAt        DateTime @default(now())
 
   enrollmentId String     @unique
@@ -1848,9 +1864,47 @@ model CourseEvaluation {
   instructorId String
   instructor   User   @relation("CourseEvaluationInstructor", fields: [instructorId], references: [id], onDelete: Restrict)
 
+  formId String?
+  form   CourseEvaluationForm? @relation(fields: [formId], references: [id], onDelete: SetNull)
+
   @@index([openingId, createdAt])
   @@index([courseId, createdAt])
   @@index([instructorId, createdAt])
+  @@index([formId, createdAt])
+}
+
+model CourseEvaluationForm {
+  id            String   @id @default(uuid())
+  titleAr       String
+  titleEn       String
+  descriptionAr String?  @db.Text
+  descriptionEn String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  courseId String @unique
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  questions   CourseEvaluationQuestion[]
+  evaluations CourseEvaluation[]
+}
+
+model CourseEvaluationQuestion {
+  id          String                       @id @default(uuid())
+  promptAr    String
+  promptEn    String
+  type        CourseEvaluationQuestionType
+  metric      CourseEvaluationMetric       @default(GENERAL)
+  isRequired  Boolean                      @default(true)
+  orderIndex  Int                          @default(0)
+  options     Json?
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
+
+  formId String
+  form   CourseEvaluationForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId, orderIndex])
 }
 
 // ===== Gamification =====

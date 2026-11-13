@@ -1,15 +1,29 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { EnrollmentStatus, Role } from '@prisma/client';
+import { CourseEvaluationMetric, CourseEvaluationQuestionType, EnrollmentStatus, Prisma, Role } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { GamificationService } from '../gamification/gamification.service';
 import { PrismaService } from '../prisma/prisma.service';
 
-type EvaluationInput = {
-  courseRating: number;
-  instructorRating: number;
-  commentAr?: string;
-  commentEn?: string;
+type EvaluationAnswerInput = { questionId: string; value: unknown };
+type EvaluationQuestionInput = {
+  id?: string;
+  promptAr: string;
+  promptEn: string;
+  type: CourseEvaluationQuestionType;
+  metric?: CourseEvaluationMetric;
+  isRequired: boolean;
+  options?: { value: string; labelAr: string; labelEn: string }[];
 };
+type EvaluationFormInput = {
+  titleAr: string;
+  titleEn: string;
+  descriptionAr?: string | null;
+  descriptionEn?: string | null;
+  questions: EvaluationQuestionInput[];
+};
+
+const QUESTION_TYPES = Object.values(CourseEvaluationQuestionType);
+const QUESTION_METRICS = Object.values(CourseEvaluationMetric);
 
 @Injectable()
 export class CourseEvaluationsService {
@@ -19,16 +33,47 @@ export class CourseEvaluationsService {
     private readonly gamification: GamificationService,
   ) {}
 
-  private validateRating(value: number, field: string) {
-    if (!Number.isInteger(value) || value < 1 || value > 5) {
-      throw new BadRequestException(`${field} must be an integer between 1 and 5`);
-    }
-  }
-
-  private validateComment(value: unknown, field: string) {
-    if (value !== undefined && value !== null && (typeof value !== 'string' || value.length > 2000)) {
-      throw new BadRequestException(`${field} must be a string of at most 2000 characters`);
-    }
+  private getOrCreateCourseForm(courseId: string) {
+    return this.prisma.courseEvaluationForm.upsert({
+      where: { courseId },
+      update: {},
+      create: {
+        courseId,
+        titleAr: 'تقييم الدورة والمدرّب',
+        titleEn: 'Course and instructor evaluation',
+        descriptionAr: 'يساعدنا رأيك على تحسين محتوى الدورة وتجربة التعلّم.',
+        descriptionEn: 'Your feedback helps us improve the course content and learning experience.',
+        questions: {
+          create: [
+            {
+              promptAr: 'كيف تقيّم محتوى الدورة؟',
+              promptEn: 'How would you rate the course content?',
+              type: CourseEvaluationQuestionType.RATING,
+              metric: CourseEvaluationMetric.COURSE,
+              isRequired: true,
+              orderIndex: 0,
+            },
+            {
+              promptAr: 'كيف تقيّم أداء المدرّب؟',
+              promptEn: 'How would you rate the instructor?',
+              type: CourseEvaluationQuestionType.RATING,
+              metric: CourseEvaluationMetric.INSTRUCTOR,
+              isRequired: true,
+              orderIndex: 1,
+            },
+            {
+              promptAr: 'ما اقتراحك لتحسين الدورة؟',
+              promptEn: 'What would you suggest to improve this course?',
+              type: CourseEvaluationQuestionType.TEXT,
+              metric: CourseEvaluationMetric.GENERAL,
+              isRequired: false,
+              orderIndex: 2,
+            },
+          ],
+        },
+      },
+      include: { questions: { orderBy: { orderIndex: 'asc' } } },
+    });
   }
 
   private async getEligibleEnrollment(courseId: string, studentId: string) {
@@ -112,25 +157,29 @@ export class CourseEvaluationsService {
         canSubmit: false,
       };
     }
-    const [state, evaluation] = await Promise.all([
+    const [state, evaluation, form] = await Promise.all([
       this.completionState(enrollment.id, courseId, enrollment.openingId),
       Promise.resolve(enrollment.courseEvaluation),
+      this.getOrCreateCourseForm(courseId),
     ]);
     return {
       courseId,
       openingId: enrollment.openingId,
       submitted: Boolean(evaluation),
       submittedAt: evaluation?.createdAt ?? null,
+      form: form ? {
+        id: form.id,
+        titleAr: form.titleAr,
+        titleEn: form.titleEn,
+        descriptionAr: form.descriptionAr,
+        descriptionEn: form.descriptionEn,
+        questions: form.questions,
+      } : null,
       ...state,
     };
   }
 
-  async submit(courseId: string, studentId: string, input: EvaluationInput) {
-    this.validateRating(input.courseRating, 'courseRating');
-    this.validateRating(input.instructorRating, 'instructorRating');
-    this.validateComment(input.commentAr, 'commentAr');
-    this.validateComment(input.commentEn, 'commentEn');
-
+  async submit(courseId: string, studentId: string, input: { answers: EvaluationAnswerInput[] }) {
     const enrollment = await this.getEligibleEnrollment(courseId, studentId);
     if (enrollment.courseEvaluation) {
       throw new ConflictException('Course evaluation has already been submitted');
@@ -144,18 +193,101 @@ export class CourseEvaluationsService {
       });
     }
 
+    const form = await this.getOrCreateCourseForm(courseId);
+    if (!form || form.questions.length === 0) {
+      throw new ConflictException('This course evaluation form is not configured');
+    }
+    if (!Array.isArray(input?.answers)) throw new BadRequestException('answers must be an array');
+    const answerMap = new Map<string, unknown>();
+    for (const answer of input.answers) {
+      if (!answer || typeof answer.questionId !== 'string' || answerMap.has(answer.questionId)) {
+        throw new BadRequestException('Invalid or duplicate evaluation answer');
+      }
+      answerMap.set(answer.questionId, answer.value);
+    }
+    const questionIds = new Set(form.questions.map(({ id }) => id));
+    if ([...answerMap.keys()].some((id) => !questionIds.has(id))) {
+      throw new BadRequestException('An evaluation answer does not belong to this form');
+    }
+
+    const answers: Prisma.InputJsonValue[] = [];
+    let courseRating: number | null = null;
+    let instructorRating: number | null = null;
+    let comment: string | null = null;
+    for (const question of form.questions) {
+      const value = answerMap.get(question.id);
+      const isEmpty = value === undefined || value === null || value === ''
+        || (question.type === CourseEvaluationQuestionType.TEXT && typeof value === 'string' && !value.trim())
+        || (Array.isArray(value) && value.length === 0);
+      if (question.isRequired && isEmpty) {
+        throw new BadRequestException(`Answer is required for: ${question.promptEn}`);
+      }
+      if (isEmpty) continue;
+
+      const options = Array.isArray(question.options) ? question.options as Array<{ value?: unknown }> : [];
+      let normalizedValue: string | number | boolean | string[];
+      switch (question.type) {
+        case CourseEvaluationQuestionType.RATING:
+          if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 5) {
+            throw new BadRequestException('Rating answers must be an integer between 1 and 5');
+          }
+          normalizedValue = value;
+          if (question.metric === CourseEvaluationMetric.COURSE && courseRating === null) courseRating = value;
+          if (question.metric === CourseEvaluationMetric.INSTRUCTOR && instructorRating === null) instructorRating = value;
+          break;
+        case CourseEvaluationQuestionType.SINGLE_CHOICE:
+          if (typeof value !== 'string' || !options.some((option) => option.value === value)) {
+            throw new BadRequestException('Select one of the available answers');
+          }
+          normalizedValue = value;
+          break;
+        case CourseEvaluationQuestionType.MULTIPLE_CHOICE:
+          if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')
+            || new Set(value).size !== value.length
+            || value.some((entry) => !options.some((option) => option.value === entry))) {
+            throw new BadRequestException('Select valid available answers');
+          }
+          normalizedValue = value as string[];
+          break;
+        case CourseEvaluationQuestionType.TEXT:
+          if (typeof value !== 'string' || value.length > 2000) {
+            throw new BadRequestException('Text answers must be at most 2000 characters');
+          }
+          normalizedValue = value.trim();
+          if (comment === null && normalizedValue) comment = normalizedValue;
+          break;
+        case CourseEvaluationQuestionType.YES_NO:
+          if (typeof value !== 'boolean') throw new BadRequestException('Yes/no answers must be true or false');
+          normalizedValue = value;
+          break;
+        default:
+          throw new BadRequestException('Unsupported evaluation question type');
+      }
+      answers.push({
+        questionId: question.id,
+        promptAr: question.promptAr,
+        promptEn: question.promptEn,
+        type: question.type,
+        metric: question.metric,
+        options: question.options ?? [],
+        value: normalizedValue,
+      });
+    }
+
     let evaluation;
     try {
       evaluation = await this.prisma.courseEvaluation.create({
         data: {
-          courseRating: input.courseRating,
-          instructorRating: input.instructorRating,
-          commentAr: input.commentAr?.trim() || null,
-          commentEn: input.commentEn?.trim() || null,
+          courseRating,
+          instructorRating,
+          commentAr: comment,
+          commentEn: comment,
+          answers,
           enrollmentId: enrollment.id,
           courseId,
           openingId: enrollment.openingId,
           instructorId: enrollment.opening?.instructorId ?? enrollment.course.instructorId,
+          formId: form.id,
         },
         select: { id: true, createdAt: true },
       });
@@ -177,6 +309,115 @@ export class CourseEvaluationsService {
       // Evaluation persistence is authoritative; reward failures must not discard a valid submission.
     }
     return { submitted: true, submittedAt: evaluation.createdAt };
+  }
+
+  async listCourseForms() {
+    const courses = await this.prisma.course.findMany({
+      select: {
+        id: true,
+        titleAr: true,
+        titleEn: true,
+        archivedAt: true,
+        evaluationForm: {
+          include: {
+            questions: { orderBy: { orderIndex: 'asc' } },
+            _count: { select: { evaluations: true } },
+          },
+        },
+      },
+      orderBy: [{ archivedAt: 'asc' }, { titleEn: 'asc' }],
+    });
+    return courses;
+  }
+
+  async saveCourseForm(courseId: string, input: EvaluationFormInput, actorId: string) {
+    if (!input || typeof input.titleAr !== 'string' || !input.titleAr.trim()
+      || typeof input.titleEn !== 'string' || !input.titleEn.trim()
+      || input.titleAr.length > 160 || input.titleEn.length > 160
+      || (input.descriptionAr !== undefined && input.descriptionAr !== null
+        && (typeof input.descriptionAr !== 'string' || input.descriptionAr.length > 1000))
+      || (input.descriptionEn !== undefined && input.descriptionEn !== null
+        && (typeof input.descriptionEn !== 'string' || input.descriptionEn.length > 1000))
+      || !Array.isArray(input.questions) || input.questions.length === 0 || input.questions.length > 40) {
+      throw new BadRequestException('Form titles and 1 to 40 questions are required');
+    }
+    for (const [index, question] of input.questions.entries()) {
+      if (!question || typeof question.promptAr !== 'string' || !question.promptAr.trim()
+        || typeof question.promptEn !== 'string' || !question.promptEn.trim()
+        || question.promptAr.length > 500 || question.promptEn.length > 500
+        || !QUESTION_TYPES.includes(question.type)
+        || (question.metric !== undefined && !QUESTION_METRICS.includes(question.metric))
+        || typeof question.isRequired !== 'boolean') {
+        throw new BadRequestException(`Question ${index + 1} is invalid`);
+      }
+      if (question.type === CourseEvaluationQuestionType.RATING
+        && (question.metric === CourseEvaluationMetric.COURSE || question.metric === CourseEvaluationMetric.INSTRUCTOR)) {
+        const duplicateMetric = input.questions.slice(0, index).some((item) =>
+          item.type === CourseEvaluationQuestionType.RATING && item.metric === question.metric);
+        if (duplicateMetric) throw new BadRequestException(`Only one ${question.metric.toLowerCase()} rating question is allowed`);
+      } else if (question.metric === CourseEvaluationMetric.COURSE || question.metric === CourseEvaluationMetric.INSTRUCTOR) {
+        throw new BadRequestException('Course and instructor metrics are only available for rating questions');
+      }
+      if (question.type === CourseEvaluationQuestionType.SINGLE_CHOICE
+        || question.type === CourseEvaluationQuestionType.MULTIPLE_CHOICE) {
+        if (!Array.isArray(question.options) || question.options.length < 2 || question.options.length > 20
+          || question.options.some((option) =>
+            !option || typeof option.value !== 'string' || !option.value.trim() || option.value.length > 100
+            || typeof option.labelAr !== 'string' || !option.labelAr.trim() || option.labelAr.length > 120
+            || typeof option.labelEn !== 'string' || !option.labelEn.trim() || option.labelEn.length > 120)
+          || new Set(question.options.map((option) => option.value)).size !== question.options.length) {
+          throw new BadRequestException(`Question ${index + 1} needs 2 to 20 unique bilingual options`);
+        }
+      } else if (question.options?.length) {
+        throw new BadRequestException(`Question ${index + 1} cannot have answer options`);
+      }
+    }
+
+    const course = await this.prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
+    if (!course) throw new NotFoundException('Course not found');
+    const form = await this.prisma.$transaction(async (tx) => {
+      const savedForm = await tx.courseEvaluationForm.upsert({
+        where: { courseId },
+        update: {
+          titleAr: input.titleAr.trim(),
+          titleEn: input.titleEn.trim(),
+          descriptionAr: input.descriptionAr?.trim() || null,
+          descriptionEn: input.descriptionEn?.trim() || null,
+        },
+        create: {
+          courseId,
+          titleAr: input.titleAr.trim(),
+          titleEn: input.titleEn.trim(),
+          descriptionAr: input.descriptionAr?.trim() || null,
+          descriptionEn: input.descriptionEn?.trim() || null,
+        },
+      });
+      await tx.courseEvaluationQuestion.deleteMany({ where: { formId: savedForm.id } });
+      for (const [orderIndex, question] of input.questions.entries()) {
+        await tx.courseEvaluationQuestion.create({
+          data: {
+            formId: savedForm.id,
+            promptAr: question.promptAr.trim(),
+            promptEn: question.promptEn.trim(),
+            type: question.type,
+            metric: question.type === CourseEvaluationQuestionType.RATING
+              ? question.metric ?? CourseEvaluationMetric.GENERAL
+              : CourseEvaluationMetric.GENERAL,
+            isRequired: question.isRequired,
+            orderIndex,
+            options: question.options?.length
+              ? question.options as Prisma.InputJsonValue
+              : Prisma.DbNull,
+          },
+        });
+      }
+      return savedForm;
+    });
+    await this.audit.logAction(`Updated evaluation form ${form.id} for Course ${courseId}`, undefined, actorId);
+    return this.prisma.courseEvaluationForm.findUnique({
+      where: { id: form.id },
+      include: { questions: { orderBy: { orderIndex: 'asc' } } },
+    });
   }
 
   async listOpeningSummaries() {
@@ -286,6 +527,7 @@ export class CourseEvaluationsService {
           instructorRating: true,
           commentAr: true,
           commentEn: true,
+          answers: true,
           createdAt: true,
           enrollment: { select: { student: { select: { id: true, email: true, metadata: true } } } },
         },
@@ -302,12 +544,14 @@ export class CourseEvaluationsService {
         },
         responseCount: evaluations.length,
         approvedStudentCount: course._count.enrollments,
-        averageCourseRating: evaluations.length
-          ? evaluations.reduce((sum, evaluation) => sum + evaluation.courseRating, 0) / evaluations.length
-          : 0,
-        averageInstructorRating: evaluations.length
-          ? evaluations.reduce((sum, evaluation) => sum + evaluation.instructorRating, 0) / evaluations.length
-          : 0,
+        averageCourseRating: evaluations.filter((evaluation) => evaluation.courseRating !== null).length
+        ? evaluations.reduce((sum, evaluation) => sum + (evaluation.courseRating ?? 0), 0)
+          / evaluations.filter((evaluation) => evaluation.courseRating !== null).length
+        : 0,
+        averageInstructorRating: evaluations.filter((evaluation) => evaluation.instructorRating !== null).length
+        ? evaluations.reduce((sum, evaluation) => sum + (evaluation.instructorRating ?? 0), 0)
+          / evaluations.filter((evaluation) => evaluation.instructorRating !== null).length
+        : 0,
         evaluations,
       };
     }
@@ -334,6 +578,7 @@ export class CourseEvaluationsService {
         instructorRating: true,
         commentAr: true,
         commentEn: true,
+        answers: true,
         createdAt: true,
         enrollment: {
           select: {
@@ -347,11 +592,13 @@ export class CourseEvaluationsService {
       opening,
       responseCount: evaluations.length,
       approvedStudentCount: opening._count.enrollments,
-      averageCourseRating: evaluations.length
-        ? evaluations.reduce((sum, evaluation) => sum + evaluation.courseRating, 0) / evaluations.length
+      averageCourseRating: evaluations.filter((evaluation) => evaluation.courseRating !== null).length
+        ? evaluations.reduce((sum, evaluation) => sum + (evaluation.courseRating ?? 0), 0)
+          / evaluations.filter((evaluation) => evaluation.courseRating !== null).length
         : 0,
-      averageInstructorRating: evaluations.length
-        ? evaluations.reduce((sum, evaluation) => sum + evaluation.instructorRating, 0) / evaluations.length
+      averageInstructorRating: evaluations.filter((evaluation) => evaluation.instructorRating !== null).length
+        ? evaluations.reduce((sum, evaluation) => sum + (evaluation.instructorRating ?? 0), 0)
+          / evaluations.filter((evaluation) => evaluation.instructorRating !== null).length
         : 0,
       evaluations,
     };

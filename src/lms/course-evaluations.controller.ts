@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -41,5 +41,21 @@ export class CourseEvaluationsController {
   listOpening(@Param('openingId') openingId: string, @Request() req: any) {
     this.evaluations.assertStaffCanRead(req.user.role);
     return this.evaluations.listOpeningEvaluations(openingId);
+  }
+
+  @ApiOperation({ summary: 'List courses and their configured evaluation forms' })
+  @Roles(Role.ADMIN, Role.COURSE_MANAGER)
+  @Get('admin/forms')
+  listForms(@Request() req: any) {
+    this.evaluations.assertStaffCanRead(req.user.role);
+    return this.evaluations.listCourseForms();
+  }
+
+  @ApiOperation({ summary: 'Create or update a course evaluation questionnaire' })
+  @Roles(Role.ADMIN, Role.COURSE_MANAGER)
+  @Put('admin/courses/:courseId/form')
+  saveForm(@Param('courseId') courseId: string, @Body() body: any, @Request() req: any) {
+    this.evaluations.assertStaffCanRead(req.user.role);
+    return this.evaluations.saveCourseForm(courseId, body, req.user.userId);
   }
 }
