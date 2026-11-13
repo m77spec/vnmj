@@ -11,7 +11,7 @@ export type HomepageConfig = {
         mode: 'AUTO' | 'MANUAL' | 'HIDDEN';
         value: number;
     }>;
-    socials: Array<{ id: 'youtube' | 'instagram' | 'telegram' | 'x' | 'facebook'; label: string; handle: string; url: string }>;
+    socials: Array<{ id: 'youtube' | 'instagram' | 'telegram' | 'x' | 'facebook' | 'linkedin' | 'whatsapp_channel'; label: string; handle: string; url: string }>;
 };
 
 const landingKeys = [
@@ -59,6 +59,8 @@ export const DEFAULT_HOMEPAGE_CONFIG: HomepageConfig = {
         { id: 'telegram', label: 'Telegram', handle: '@laxalabacademy', url: 'https://t.me/laxalabacademy' },
         { id: 'x', label: 'X (Twitter)', handle: '@laxalabacademy', url: 'https://x.com/laxalabacademy' },
         { id: 'facebook', label: 'Facebook', handle: 'laxalabacademy', url: 'https://facebook.com/laxalabacademy' },
+        { id: 'linkedin', label: 'LinkedIn', handle: 'Laxalab Academy', url: 'https://www.linkedin.com/company/laxalab-academy/' },
+        { id: 'whatsapp_channel', label: 'WhatsApp Channel', handle: 'Laxalab Academy', url: 'https://whatsapp.com/channel/0029VbD1bFgCsU9Tqtwwrk0R' },
     ],
 };
 

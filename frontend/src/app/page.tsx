@@ -86,6 +86,8 @@ export default function Home() {
     { icon: Send, id: 'telegram' },
     { icon: Hash, id: 'x' },
     { icon: Globe, id: 'facebook' },
+    { icon: Globe, id: 'linkedin' },
+    { icon: MessageCircle, id: 'whatsapp_channel' },
   ].map((social) => ({
     ...social,
     ...homepageConfig.socials.find((item) => item.id === social.id),

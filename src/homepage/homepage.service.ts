@@ -168,13 +168,13 @@ export class HomepageService {
         }
         if (statIds.size !== STAT_IDS.length) throw new BadRequestException('All homepage statistics must be included');
 
-        if (!Array.isArray(value.socials) || value.socials.length !== 5) {
+        if (!Array.isArray(value.socials) || value.socials.length !== 7) {
             throw new BadRequestException('Homepage social links are invalid');
         }
         const socialIds = new Set<string>();
         for (const social of value.socials) {
             if (!isRecord(social) || typeof social.id !== 'string' || socialIds.has(social.id) ||
-                !['youtube', 'instagram', 'telegram', 'x', 'facebook'].includes(social.id) ||
+                !['youtube', 'instagram', 'telegram', 'x', 'facebook', 'linkedin', 'whatsapp_channel'].includes(social.id) ||
                 typeof social.label !== 'string' || social.label.length > 80 ||
                 typeof social.handle !== 'string' || social.handle.length > 120 ||
                 typeof social.url !== 'string' || social.url.length > 500 ||

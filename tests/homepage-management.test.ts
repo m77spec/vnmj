@@ -20,6 +20,8 @@ const config = {
         { id: 'telegram', label: 'Telegram', handle: '@laxalabacademy', url: 'https://t.me/laxalabacademy' },
         { id: 'x', label: 'X', handle: '@laxalabacademy', url: 'https://x.com/laxalabacademy' },
         { id: 'facebook', label: 'Facebook', handle: 'laxalabacademy', url: 'https://facebook.com/laxalabacademy' },
+        { id: 'linkedin', label: 'LinkedIn', handle: 'Laxalab Academy', url: 'https://www.linkedin.com/company/laxalab-academy/' },
+        { id: 'whatsapp_channel', label: 'WhatsApp Channel', handle: 'Laxalab Academy', url: 'https://whatsapp.com/channel/0029VbD1bFgCsU9Tqtwwrk0R' },
     ],
 };
 
@@ -100,5 +102,17 @@ describe('homepage management', () => {
 
         assert.deepEqual(reordered.sections.map((section) => section.id), ['cta', 'contact', 'about', 'courses', 'stats', 'features', 'hero']);
         assert.equal(reordered.sections.find((section) => section.id === 'stats')?.visible, false);
+    });
+
+    test('merging adds new social links to older saved configurations', () => {
+        const legacyConfig = structuredClone(config);
+        legacyConfig.socials = legacyConfig.socials.slice(0, 5);
+
+        const merged = mergeHomepageConfig(legacyConfig);
+
+        assert.deepEqual(
+            merged.socials.map((social) => social.id),
+            ['youtube', 'instagram', 'telegram', 'x', 'facebook', 'linkedin', 'whatsapp_channel'],
+        );
     });
 });

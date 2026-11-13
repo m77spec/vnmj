@@ -220,6 +220,8 @@ export default function ContactContent() {
                                 { icon: Send, label: 'Telegram', handle: '@laxalabacademy', href: 'https://t.me/laxalabacademy' },
                                 { icon: Hash, label: 'X (Twitter)', handle: '@laxalabacademy', href: 'https://x.com/laxalabacademy' },
                                 { icon: Globe, label: 'Facebook', handle: 'laxalabacademy', href: 'https://facebook.com/laxalabacademy' },
+                                { icon: Globe, label: 'LinkedIn', handle: 'Laxalab Academy', href: 'https://www.linkedin.com/company/laxalab-academy/' },
+                                { icon: MessageCircle, label: isAr ? 'قناة واتساب' : 'WhatsApp Channel', handle: 'Laxalab Academy', href: 'https://whatsapp.com/channel/0029VbD1bFgCsU9Tqtwwrk0R' },
                             ].map((s) => (
                                 <li key={s.label}>
                                     <a
