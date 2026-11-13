@@ -91,8 +91,12 @@ export class GamificationService {
         const lessonCount = await this.prisma.lessonProgress.count({ where: { enrollment: { studentId: userId } } });
         if (lessonCount >= 1) await this.awardBadge(userId, 'first_lesson');
 
-        const quizPasses = await this.prisma.quizAttempt.count({ where: { enrollment: { studentId: userId }, passed: true } });
-        if (quizPasses >= 5) await this.awardBadge(userId, 'quiz_master');
+        const passedQuizzes = await this.prisma.quizAttempt.findMany({
+            where: { enrollment: { studentId: userId }, passed: true },
+            distinct: ['quizId'],
+            select: { quizId: true },
+        });
+        if (passedQuizzes.length >= 5) await this.awardBadge(userId, 'quiz_master');
 
         const completedCourses = await this.prisma.enrollment.count({ where: { studentId: userId, status: 'APPROVED' } });
         if (completedCourses >= 1) await this.awardBadge(userId, 'course_complete');

@@ -26,6 +26,82 @@ export class GradesController {
         return this.gradesService.getRoster(openingId, req.user.userId, req.user.role);
     }
 
+    @ApiOperation({ summary: 'Unified gradebook for an opening' })
+    @RequirePermissions(PERMISSIONS.GRADES_READ)
+    @Get('openings/:openingId/gradebook')
+    gradebook(@Param('openingId') openingId: string, @Request() req: any) {
+        return this.gradesService.getGradebook(openingId, req.user.userId, req.user.role);
+    }
+
+    @ApiOperation({ summary: 'Save weighted grade categories (weights must total 100%)' })
+    @RequirePermissions(PERMISSIONS.GRADES_WRITE)
+    @Put('openings/:openingId/gradebook/categories')
+    saveGradebookCategories(
+        @Param('openingId') openingId: string,
+        @Body('categories') categories: { id?: string; nameAr: string; nameEn: string; weightPercent: number }[],
+        @Request() req: any,
+    ) {
+        return this.gradesService.saveGradebookCategories(openingId, categories, req.user.userId, req.user.role);
+    }
+
+    @ApiOperation({ summary: 'Assign gradebook items to weighted categories' })
+    @RequirePermissions(PERMISSIONS.GRADES_WRITE)
+    @Put('openings/:openingId/gradebook/items')
+    saveGradebookItems(
+        @Param('openingId') openingId: string,
+        @Body('items') items: { sourceType: 'assessment' | 'task' | 'quiz' | 'attendance'; sourceId: string; categoryId: string | null }[],
+        @Request() req: any,
+    ) {
+        return this.gradesService.saveGradebookItems(openingId, items, req.user.userId, req.user.role);
+    }
+
+    @ApiOperation({ summary: 'Override an automatic grade without changing its source record' })
+    @RequirePermissions(PERMISSIONS.GRADES_WRITE)
+    @Put('openings/:openingId/gradebook/overrides')
+    setGradeOverride(
+        @Param('openingId') openingId: string,
+        @Body('enrollmentId') enrollmentId: string,
+        @Body('sourceType') sourceType: 'task' | 'quiz' | 'attendance',
+        @Body('sourceId') sourceId: string,
+        @Body('score') score: number,
+        @Body('notes') notes: string | undefined,
+        @Request() req: any,
+    ) {
+        if (!enrollmentId || !sourceId || score == null) {
+            throw new BadRequestException('enrollmentId, sourceId, and score are required');
+        }
+        return this.gradesService.setGradeOverride(
+            openingId,
+            enrollmentId,
+            sourceType,
+            sourceId,
+            score,
+            notes,
+            req.user.userId,
+            req.user.role,
+        );
+    }
+
+    @ApiOperation({ summary: 'Clear a grade override and restore the original grade' })
+    @RequirePermissions(PERMISSIONS.GRADES_WRITE)
+    @Delete('openings/:openingId/gradebook/overrides/:enrollmentId/:sourceType/:sourceId')
+    clearGradeOverride(
+        @Param('openingId') openingId: string,
+        @Param('enrollmentId') enrollmentId: string,
+        @Param('sourceType') sourceType: 'task' | 'quiz' | 'attendance',
+        @Param('sourceId') sourceId: string,
+        @Request() req: any,
+    ) {
+        return this.gradesService.clearGradeOverride(
+            openingId,
+            enrollmentId,
+            sourceType,
+            sourceId,
+            req.user.userId,
+            req.user.role,
+        );
+    }
+
     @ApiOperation({ summary: 'List assessment components for an opening (own openings only for instructors)' })
     @RequirePermissions(PERMISSIONS.GRADES_READ)
     @Get('openings/:openingId/assessments')

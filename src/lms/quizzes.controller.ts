@@ -77,6 +77,40 @@ export class QuizzesController {
     return this.quizzes.removeForInstructor(id, openingId, req.user.userId, req.user.role);
   }
 
+  @ApiOperation({ summary: 'List student attempts for an instructor-managed quiz' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.INSTRUCTOR)
+  @Get('manage/opening/:openingId/:id/attempts')
+  listAttemptsForInstructor(@Param('openingId') openingId: string, @Param('id') id: string, @Request() req: any) {
+    return this.quizzes.listAttemptsForOpening(openingId, id, req.user.userId, req.user.role);
+  }
+
+  @ApiOperation({ summary: 'Grant one additional quiz attempt to an enrolled student' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.INSTRUCTOR)
+  @Post('manage/opening/:openingId/:id/attempts/:enrollmentId/grant')
+  grantInstructorAttempt(
+    @Param('openingId') openingId: string,
+    @Param('id') id: string,
+    @Param('enrollmentId') enrollmentId: string,
+    @Request() req: any,
+  ) {
+    return this.quizzes.grantExtraAttempt(openingId, id, enrollmentId, req.user.userId, req.user.role);
+  }
+
+  @ApiOperation({ summary: 'Reset a student’s quiz attempts and granted retries' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.INSTRUCTOR)
+  @Delete('manage/opening/:openingId/:id/attempts/:enrollmentId')
+  resetInstructorAttempts(
+    @Param('openingId') openingId: string,
+    @Param('id') id: string,
+    @Param('enrollmentId') enrollmentId: string,
+    @Request() req: any,
+  ) {
+    return this.quizzes.resetStudentAttempts(openingId, id, enrollmentId, req.user.userId, req.user.role);
+  }
+
   @ApiOperation({ summary: 'List quizzes for a managed opening' })
   @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
   @Roles(Role.ADMIN, Role.COURSE_MANAGER)
@@ -114,6 +148,43 @@ export class QuizzesController {
     return this.quizzes.removeForInstructor(id, openingId, req.user.userId, req.user.role);
   }
 
+  @ApiOperation({ summary: 'List student attempts for a managed quiz' })
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles(Role.ADMIN, Role.COURSE_MANAGER)
+  @RequirePermissions(PERMISSIONS.CONTENT_READ)
+  @Get('admin/manage/opening/:openingId/:id/attempts')
+  listAttemptsForManagedQuiz(@Param('openingId') openingId: string, @Param('id') id: string, @Request() req: any) {
+    return this.quizzes.listAttemptsForOpening(openingId, id, req.user.userId, req.user.role);
+  }
+
+  @ApiOperation({ summary: 'Grant one additional quiz attempt to an enrolled student' })
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles(Role.ADMIN, Role.COURSE_MANAGER)
+  @RequirePermissions(PERMISSIONS.CONTENT_WRITE)
+  @Post('admin/manage/opening/:openingId/:id/attempts/:enrollmentId/grant')
+  grantManagedAttempt(
+    @Param('openingId') openingId: string,
+    @Param('id') id: string,
+    @Param('enrollmentId') enrollmentId: string,
+    @Request() req: any,
+  ) {
+    return this.quizzes.grantExtraAttempt(openingId, id, enrollmentId, req.user.userId, req.user.role);
+  }
+
+  @ApiOperation({ summary: 'Reset a student’s quiz attempts and granted retries' })
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles(Role.ADMIN, Role.COURSE_MANAGER)
+  @RequirePermissions(PERMISSIONS.CONTENT_WRITE)
+  @Delete('admin/manage/opening/:openingId/:id/attempts/:enrollmentId')
+  resetManagedAttempts(
+    @Param('openingId') openingId: string,
+    @Param('id') id: string,
+    @Param('enrollmentId') enrollmentId: string,
+    @Request() req: any,
+  ) {
+    return this.quizzes.resetStudentAttempts(openingId, id, enrollmentId, req.user.userId, req.user.role);
+  }
+
   @ApiOperation({ summary: 'List quizzes for a course (with answers when includeUnpublished=true)' })
   @UseGuards(OptionalJwtAuthGuard)
   @Get('course/:courseId')
@@ -128,7 +199,11 @@ export class QuizzesController {
     }
     // Only allow includeUnpublished for authenticated staff users
     const allowUnpublished = includeUnpublished === 'true' && req?.user?.role && ['ADMIN', 'COURSE_MANAGER'].includes(req.user.role);
-    return this.quizzes.listByCourse(courseId, allowUnpublished);
+    return this.quizzes.listByCourse(
+      courseId,
+      allowUnpublished,
+      req?.user?.role === Role.STUDENT ? req.user.userId : undefined,
+    );
   }
 
   @ApiOperation({ summary: 'Get a published quiz (answers stripped)' })

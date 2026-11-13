@@ -19,7 +19,14 @@ function makeHarness(h: {
     enrollment?: any;
     modules?: any[];
     tasks?: { moduleId: string | null; submissions: any[] }[];
-    quizzes?: { moduleId: string | null; attempts: { passed: boolean }[] }[];
+    quizzes?: {
+        id?: string;
+        moduleId: string | null;
+        titleAr?: string;
+        titleEn?: string;
+        gateNextLessons?: boolean;
+        attempts: { passed: boolean }[];
+    }[];
     enrolled?: boolean;
     contentType?: string;
     progress?: { moduleId: string; completedAt: Date | null }[];
@@ -111,7 +118,8 @@ function makeHarness(h: {
     return { service, calls, awarded, get upserted() { return upserted; } };
 }
 
-const module1 = { id: 'mod-1', courseId: 'crs-1', titleAr: 'درس', titleEn: 'Lesson' };
+const module1 = { id: 'mod-1', courseId: 'crs-1', titleAr: 'درس', titleEn: 'Lesson', orderIndex: 1 };
+const module2 = { id: 'mod-2', courseId: 'crs-1', titleAr: 'الدرس التالي', titleEn: 'Next lesson', orderIndex: 2 };
 
 describe('lesson completion gate', () => {
     test('refuses completion while the lesson has an unsubmitted assignment', async () => {
@@ -189,6 +197,49 @@ describe('lesson completion gate', () => {
 
         await h.service.markComplete('enr-1', 'mod-1', 'stu-1');
         assert.ok(h.upserted, 'a sibling module’s work must not block this one');
+    });
+
+    test('an unpassed gated quiz blocks completion of every subsequent lesson', async () => {
+        const h = makeHarness({
+            modules: [module1, module2],
+            quizzes: [{
+                id: 'quiz-1',
+                moduleId: 'mod-1',
+                titleAr: 'اختبار الدرس',
+                titleEn: 'Lesson quiz',
+                gateNextLessons: true,
+                attempts: [],
+            }],
+        });
+
+        await assert.rejects(
+            () => h.service.markComplete('enr-1', 'mod-2', 'stu-1'),
+            (err: any) => {
+                assert.equal(err.getStatus?.(), 409);
+                assert.equal(err.response?.code, 'LESSON_LOCKED_BY_QUIZ');
+                assert.equal(err.response?.quizId, 'quiz-1');
+                return true;
+            },
+        );
+        assert.equal(h.upserted, null);
+    });
+
+    test('passing a gated quiz unlocks the following lesson', async () => {
+        const h = makeHarness({
+            modules: [module1, module2],
+            quizzes: [{
+                id: 'quiz-1',
+                moduleId: 'mod-1',
+                titleAr: 'اختبار الدرس',
+                titleEn: 'Lesson quiz',
+                gateNextLessons: true,
+                attempts: [{ passed: true }],
+            }],
+        });
+
+        await h.service.markComplete('enr-1', 'mod-2', 'stu-1');
+        assert.ok(h.upserted, 'the following lesson should unlock after a pass');
+        assert.equal(h.upserted.create.moduleId, 'mod-2');
     });
 
     test('assignments are scoped to the enrollment opening, and only published quizzes count', async () => {

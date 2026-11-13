@@ -12,7 +12,7 @@ import {
     PlayCircle, FileText, ClipboardList, Link2, Clock, CheckCircle, Play, Pause,
     RotateCcw, Volume2, VolumeX, Maximize, ZoomIn, ZoomOut, Maximize2, Download,
     UploadCloud, StickyNote, MessagesSquare, Send, X, BookMarked, MessageCircle, ArrowRight,
-    Bell, Megaphone, Calendar, User, AlertTriangle, Video, CalendarDays, Radio, Star,
+    Bell, Megaphone, Calendar, User, AlertTriangle, Video, CalendarDays, Radio, Star, LockKeyhole,
 } from 'lucide-react';
 import CourseChat from '@/components/CourseChat';
 import DiscussionForum from '@/components/DiscussionForum';
@@ -49,6 +49,8 @@ interface CourseModule {
     links?: LessonLink[] | null;
     outcomes?: Outcome[] | null;
     chapterId?: string | null;
+    locked?: boolean;
+    lockedByQuiz?: { id: string; titleAr: string; titleEn: string } | null;
 }
 interface CourseChapter {
     id: string;
@@ -63,6 +65,8 @@ interface ProgressModule extends CourseModule {
     pendingTasks: number;
     failedQuizzes: number;
     canComplete: boolean;
+    locked?: boolean;
+    lockedByQuiz?: { id: string; titleAr: string; titleEn: string } | null;
 }
 interface ProgressData {
     enrollmentId: string;
@@ -335,7 +339,10 @@ export default function CoursePlayer({ courseId }: Props) {
                     const completedIds = new Set((incoming?.modules ?? [])
                         .filter(module => module.completed)
                         .map(module => module.id));
-                    const firstIncomplete = mods.find(module => !completedIds.has(module.id)) ?? mods[0];
+                    const unlockedIds = new Set((incoming?.modules ?? []).filter((module) => !module.locked).map((module) => module.id));
+                    const firstIncomplete = mods.find(module => !completedIds.has(module.id) && unlockedIds.has(module.id))
+                        ?? mods.find((module) => unlockedIds.has(module.id))
+                        ?? mods[0];
                     setSelectedId(firstIncomplete.id);
                 }
             } catch (e) {
@@ -394,7 +401,11 @@ export default function CoursePlayer({ courseId }: Props) {
     const allModules = useMemo(() => flatten(chapters), [chapters, flatten]);
     const notesMap = useMemo(() => new Map((notesData?.notes || []).map(n => [n.moduleId, n.content])), [notesData]);
 
-    const selected = useMemo(() => allModules.find(m => m.id === selectedId) ?? allModules[0] ?? null, [allModules, selectedId]);
+    const selected = useMemo(() => {
+        const selectedModule = allModules.find((module) => module.id === selectedId);
+        if (selectedModule && !selectedModule.locked) return selectedModule;
+        return allModules.find((module) => !module.locked) ?? allModules[0] ?? null;
+    }, [allModules, selectedId]);
     const selectedTasks = useMemo(() => tasks.filter(tk => tk.moduleId === selected?.id), [tasks, selected]);
     const selectedKind = useMemo(() => (selected ? kindOf(selected, selectedTasks) : null), [selected, selectedTasks]);
 
@@ -566,6 +577,25 @@ export default function CoursePlayer({ courseId }: Props) {
         }
     };
 
+    const refreshProgressAfterQuiz = async () => {
+        try {
+            const response = await api.get(`/lms/courses/${courseId}/my-progress`);
+            const refreshed = response.data as ProgressData;
+            const progressModules = new Map(refreshed.modules.map((module) => [module.id, module]));
+            setProgress(refreshed);
+            setCourse((current) => current && ({
+                ...current,
+                modules: refreshed.modules,
+                chapters: current.chapters?.map((chapter) => ({
+                    ...chapter,
+                    modules: (chapter.modules || []).map((module) => progressModules.get(module.id) || module),
+                })),
+            }));
+        } catch (error) {
+            toast.error(getErrorMessage(error) || (isAr ? 'تعذر تحديث تقدم الدورة بعد الاختبار.' : 'Could not refresh course progress after the quiz.'));
+        }
+    };
+
     const lessonsComplete = Boolean(progress && progress.total > 0 && progress.completed >= progress.total);
     const isCourseComplete = lessonsComplete && evaluation?.submitted === true;
     const needsCourseEvaluation = lessonsComplete && evaluation?.canSubmit === true && !evaluation.submitted;
@@ -594,14 +624,19 @@ export default function CoursePlayer({ courseId }: Props) {
 
     const renderLessonButton = (m: CourseModule, active: boolean) => {
         const done = completedSet.has(m.id);
+        const locked = !!m.locked;
         return (
             <button
                 key={m.id}
-                onClick={() => setSelectedId(m.id)}
-                className={`w-full flex items-center gap-3 text-left rtl:text-right px-3 py-2.5 rounded-xl border transition-all duration-200 cursor-pointer ${
+                onClick={() => !locked && setSelectedId(m.id)}
+                disabled={locked}
+                title={locked ? (isAr ? 'اجتز الاختبار السابق لفتح هذا الدرس' : 'Pass the previous quiz to unlock this lesson') : undefined}
+                className={`w-full flex items-center gap-3 text-left rtl:text-right px-3 py-2.5 rounded-xl border transition-all duration-200 ${
                     active
                         ? 'bg-gradient-to-r from-brand-gold/10 to-brand-gold/5 border-l-2 border-l-brand-gold-light border-line text-ink shadow-lg shadow-black/10'
-                        : 'bg-transparent border-transparent hover:bg-ink/[0.04] hover:border-line text-ink-muted'
+                        : locked
+                            ? 'bg-ink/[0.02] border-transparent text-ink-subtle opacity-60 cursor-not-allowed'
+                            : 'bg-transparent border-transparent hover:bg-ink/[0.04] hover:border-line text-ink-muted cursor-pointer'
                 }`}
             >
                 <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs ${
@@ -611,7 +646,7 @@ export default function CoursePlayer({ courseId }: Props) {
                             ? 'bg-emerald-500/20 text-emerald-800 dark:text-emerald-300'
                             : 'bg-ink/[0.08] text-ink-muted'
                 }`}>
-                    {done ? <CheckCircle size={14} /> : renderIcon(m)}
+                    {locked ? <LockKeyhole size={14} /> : done ? <CheckCircle size={14} /> : renderIcon(m)}
                 </span>
                 <span className={`flex-1 min-w-0 truncate text-sm font-bold ${active ? 'text-ink' : ''}`}>{pick(m, 'title')}</span>
                 {!isLive && !!m.durationMinutes && (
@@ -775,8 +810,9 @@ export default function CoursePlayer({ courseId }: Props) {
                     ) : <span />}
                     {nextM ? (
                         <button
-                            onClick={() => setSelectedId(nextM.id)}
-                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all duration-200 cursor-pointer bg-gradient-to-r from-brand-gold to-brand-gold-dark text-black hover:shadow-lg hover:shadow-brand-gold/20 hover:scale-[1.01]"
+                            onClick={() => !nextM.locked && setSelectedId(nextM.id)}
+                            disabled={!!nextM.locked}
+                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all duration-200 cursor-pointer bg-gradient-to-r from-brand-gold to-brand-gold-dark text-black hover:shadow-lg hover:shadow-brand-gold/20 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
                         >
                             <span className="max-w-[180px] truncate">{pick(nextM, 'title')}</span>
                             <ArrowRight size={14} className="rtl:-scale-x-100 shrink-0" />
@@ -921,6 +957,7 @@ export default function CoursePlayer({ courseId }: Props) {
                                             enrollmentId={progress.enrollmentId}
                                             onComplete={(passed) => {
                                                 toast.success(passed ? (isAr ? 'نجحت في الاختبار!' : 'Quiz passed!') : (isAr ? 'حاول مرة أخرى' : 'Try again'));
+                                                void refreshProgressAfterQuiz();
                                             }}
                                         />
                                     </div>
@@ -946,6 +983,7 @@ export default function CoursePlayer({ courseId }: Props) {
                                             enrollmentId={progress.enrollmentId}
                                             onComplete={(passed) => {
                                                 toast.success(passed ? (isAr ? 'اجتزت الاختبار النهائي!' : 'Final exam passed!') : (isAr ? 'لم تجتز الاختبار بعد، يمكنك المحاولة مجددًا.' : 'Not passed yet. You can try again.'));
+                                                void refreshProgressAfterQuiz();
                                             }}
                                         />
                                     </div>

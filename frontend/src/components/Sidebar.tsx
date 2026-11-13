@@ -60,9 +60,10 @@ export default function Sidebar() {
         : roleKey === 'INSTRUCTOR'
             ? groupInstructorNavLinks(links, t)
             : groupAdminNavLinks(links, t);
+    const dedupedPublicLinks = publicLinks.filter((link) => !links.some((navLink) => navLink.href === link.href));
     const sections = [
         ...roleSections,
-        { title: t('sidebar.nav_public'), links: publicLinks },
+        ...(dedupedPublicLinks.length ? [{ title: t('sidebar.nav_public'), links: dedupedPublicLinks }] : []),
     ];
     const activeLink = getActiveNavLink(pathname, navigationLinks);
 

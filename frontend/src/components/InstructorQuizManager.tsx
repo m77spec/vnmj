@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, getErrorMessage } from '@/lib/api';
 import { useI18n } from '@/lib/i18n-context';
-import { BookOpenCheck, Check, CircleHelp, FilePlus2, Loader, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
+import { BookOpenCheck, Check, CircleHelp, FilePlus2, Loader, Pencil, Plus, RotateCcw, Save, Trash2, Users, X } from 'lucide-react';
 
 type QuestionType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';
 type InputLanguage = 'ARABIC' | 'ENGLISH' | 'BOTH';
@@ -35,7 +35,17 @@ interface CourseQuiz {
     isFinal?: boolean;
     isPublished: boolean;
     passScore: number;
+    maxAttempts: number | null;
+    gateNextLessons: boolean;
     questions: QuizQuestion[];
+}
+
+interface QuizStudentAttempts {
+    enrollmentId: string;
+    student: { id: string; email: string; metadata?: Record<string, unknown> | null };
+    attempts: Array<{ id: string; score: number; passed: boolean; submittedAt: string }>;
+    extraAttempts: number;
+    attemptsAllowed: number | null;
 }
 
 interface Lesson {
@@ -82,6 +92,10 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
     const [editingId, setEditingId] = useState<string | null>(null);
     const [draft, setDraft] = useState<CourseQuiz | null>(null);
     const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
+    const [attemptsByQuiz, setAttemptsByQuiz] = useState<Record<string, QuizStudentAttempts[]>>({});
+    const [openAttemptsQuizId, setOpenAttemptsQuizId] = useState<string | null>(null);
+    const [attemptsLoadingQuizId, setAttemptsLoadingQuizId] = useState<string | null>(null);
+    const [attemptActionKey, setAttemptActionKey] = useState<string | null>(null);
     const orderedLessons = useMemo(() => {
         const unique = new Map<string, Lesson>();
         lessons.forEach((lesson) => unique.set(lesson.id, lesson));
@@ -139,6 +153,8 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
             isFinal: false,
             isPublished: false,
             passScore: 60,
+            maxAttempts: 1,
+            gateNextLessons: false,
             questions: [makeQuestion()],
         });
         setNotice(null);
@@ -149,6 +165,8 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
         setInputLanguage('BOTH');
         setDraft({
             ...quiz,
+            maxAttempts: quiz.maxAttempts ?? null,
+            gateNextLessons: !!quiz.gateNextLessons,
             questions: quiz.questions.map((question) => {
                 const options = (question.options as unknown[]).map((rawOption, index) => {
                     if (typeof rawOption === 'string') {
@@ -239,6 +257,8 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
             isFinal: !!draft.isFinal,
             isPublished: !!draft.isPublished,
             passScore: Math.min(100, Math.max(1, Number(draft.passScore) || 60)),
+            maxAttempts: draft.maxAttempts === null ? null : Math.min(100, Math.max(1, Number(draft.maxAttempts) || 1)),
+            gateNextLessons: !draft.isFinal && !!draft.gateNextLessons,
             questions: draft.questions.map((question, orderIndex) => ({
                 type: question.type,
                 ...localizedFields(question.textAr, question.textEn),
@@ -284,6 +304,50 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
         } catch (error) {
             setNotice({ text: getErrorMessage(error) || (isAr ? 'تعذر حذف الاختبار.' : 'Could not delete the quiz.'), error: true });
         }
+    };
+
+    const loadAttempts = async (quiz: CourseQuiz) => {
+        setOpenAttemptsQuizId(quiz.id);
+        setAttemptsLoadingQuizId(quiz.id);
+        try {
+            const response = await api.get(`${openingEndpoint}/${openingId}/${quiz.id}/attempts`);
+            setAttemptsByQuiz((current) => ({ ...current, [quiz.id]: response.data }));
+        } catch (error) {
+            setNotice({ text: getErrorMessage(error) || text('تعذر تحميل نتائج الاختبار.', 'Could not load quiz results.'), error: true });
+        } finally {
+            setAttemptsLoadingQuizId(null);
+        }
+    };
+
+    const manageStudentAttempts = async (quiz: CourseQuiz, student: QuizStudentAttempts, action: 'grant' | 'reset') => {
+        if (action === 'reset' && !confirm(text(
+            'سيتم حذف سجل محاولات الطالب لهذا الاختبار وإتاحة البدء من جديد. هل تريد المتابعة؟',
+            'This deletes the student’s attempt history for this quiz and allows a fresh start. Continue?',
+        ))) return;
+        const key = `${quiz.id}:${student.enrollmentId}`;
+        setAttemptActionKey(key);
+        try {
+            const endpoint = `${openingEndpoint}/${openingId}/${quiz.id}/attempts/${student.enrollmentId}`;
+            if (action === 'grant') await api.post(`${endpoint}/grant`);
+            else await api.delete(endpoint);
+            setNotice({ text: action === 'grant'
+                ? text('تم منح الطالب محاولة إضافية.', 'An extra attempt was granted.')
+                : text('تم تصفير محاولات الطالب.', 'The student’s attempts were reset.'), error: false });
+            await loadAttempts(quiz);
+        } catch (error) {
+            setNotice({ text: getErrorMessage(error) || text('تعذر تعديل محاولات الطالب.', 'Could not update the student’s attempts.'), error: true });
+        } finally {
+            setAttemptActionKey(null);
+        }
+    };
+
+    const studentName = (student: QuizStudentAttempts['student']) => {
+        const metadata = student.metadata || {};
+        for (const key of ['nameAr', 'nameEn', 'fullName']) {
+            const value = metadata[key];
+            if (typeof value === 'string' && value.trim()) return value.trim();
+        }
+        return student.email;
     };
 
     const text = (ar: string, en: string) => isAr ? ar : en;
@@ -378,6 +442,46 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
                         <label className="space-y-1.5 text-xs font-bold text-gray-300">{text('درجة النجاح (%)', 'Passing score (%)')}
                             <input className={inputClass} type="number" min={1} max={100} value={draft.passScore} onChange={(event) => setDraft({ ...draft, passScore: Number(event.target.value) })} />
                         </label>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="space-y-1.5 text-xs font-bold text-gray-300">
+                            {text('عدد المحاولات المسموح', 'Allowed attempts')}
+                            <select
+                                className={inputClass}
+                                value={draft.maxAttempts === null ? 'unlimited' : draft.maxAttempts === 1 ? 'one' : 'limited'}
+                                onChange={(event) => {
+                                    const value = event.target.value;
+                                    setDraft({ ...draft, maxAttempts: value === 'unlimited' ? null : value === 'one' ? 1 : Math.max(2, draft.maxAttempts || 2) });
+                                }}
+                            >
+                                <option value="one">{text('مرة واحدة', 'One attempt')}</option>
+                                <option value="limited">{text('عدد محدد', 'Limited attempts')}</option>
+                                <option value="unlimited">{text('مفتوح بلا حد', 'Unlimited')}</option>
+                            </select>
+                            {draft.maxAttempts !== null && draft.maxAttempts > 1 && (
+                                <input
+                                    className={inputClass}
+                                    type="number"
+                                    min={2}
+                                    max={100}
+                                    value={draft.maxAttempts}
+                                    onChange={(event) => setDraft({ ...draft, maxAttempts: Math.min(100, Math.max(2, Number(event.target.value) || 2)) })}
+                                    aria-label={text('عدد المحاولات', 'Attempt count')}
+                                />
+                            )}
+                        </label>
+                        {!draft.isFinal && (
+                            <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-white/10 bg-black/10 p-3 text-xs font-bold leading-relaxed text-gray-300">
+                                <input
+                                    type="checkbox"
+                                    className="mt-0.5 h-4 w-4 shrink-0 accent-brand-gold"
+                                    checked={draft.gateNextLessons}
+                                    onChange={(event) => setDraft({ ...draft, gateNextLessons: event.target.checked })}
+                                />
+                                {text('قفل الدروس التالية حتى يجتاز الطالب هذا الاختبار', 'Lock subsequent lessons until the student passes this quiz')}
+                            </label>
+                        )}
                     </div>
 
                     <label className="flex w-fit cursor-pointer items-center gap-2 text-sm font-bold text-gray-300">
@@ -502,7 +606,9 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
                                     </div>
                                     <h4 className="truncate font-black text-white">{isAr ? quiz.titleAr : quiz.titleEn}</h4>
                                     {(isAr ? quiz.descriptionAr : quiz.descriptionEn) && <p className="mt-1 line-clamp-2 text-sm text-gray-400">{isAr ? quiz.descriptionAr : quiz.descriptionEn}</p>}
-                                    <p className="mt-3 text-xs font-bold text-gray-500">{quiz.questions.length} {text('سؤال', 'questions')} · {text('درجة النجاح', 'Pass score')} {quiz.passScore}%</p>
+                                    <p className="mt-3 text-xs font-bold text-gray-500">
+                                        {quiz.questions.length} {text('سؤال', 'questions')} · {text('درجة النجاح', 'Pass score')} {quiz.passScore}% · {quiz.maxAttempts == null ? text('محاولات مفتوحة', 'Unlimited attempts') : `${text('المحاولات', 'Attempts')}: ${quiz.maxAttempts}`}
+                                    </p>
                                 </div>
                                 <div className="flex shrink-0 gap-1">
                                     <button type="button" onClick={() => startEdit(quiz)} className="rounded-lg p-2 text-gray-300 hover:bg-white/5 hover:text-brand-gold-light" aria-label={text('تعديل', 'Edit')}><Pencil size={16} /></button>
@@ -513,6 +619,71 @@ export default function InstructorQuizManager({ openingId, courseId, lessons, ad
                                 <Check size={13} className="text-emerald-400" />
                                 {text('الإجابات محفوظة بشكل آمن ولا تظهر للطلاب قبل التقييم.', 'Answer keys stay private and are never sent to students.')}
                             </div>
+                            <button
+                                type="button"
+                                onClick={() => openAttemptsQuizId === quiz.id ? setOpenAttemptsQuizId(null) : void loadAttempts(quiz)}
+                                className="mt-4 inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-gray-200 hover:border-brand-gold/40 hover:text-brand-gold-light"
+                            >
+                                <Users size={14} />
+                                {text('نتائج ومحاولات الطلاب', 'Student results & attempts')}
+                            </button>
+                            {openAttemptsQuizId === quiz.id && (
+                                <div className="mt-3 space-y-3 rounded-xl border border-white/10 bg-black/10 p-3">
+                                    {attemptsLoadingQuizId === quiz.id ? (
+                                        <div className="flex justify-center py-4"><Loader size={18} className="animate-spin text-brand-gold-light" /></div>
+                                    ) : (attemptsByQuiz[quiz.id] || []).length === 0 ? (
+                                        <p className="py-3 text-center text-xs text-gray-400">{text('لم يسجل أي طالب محاولة لهذا الاختبار بعد.', 'No students have attempted this quiz yet.')}</p>
+                                    ) : (attemptsByQuiz[quiz.id] || []).map((student) => {
+                                        const actionKey = `${quiz.id}:${student.enrollmentId}`;
+                                        return (
+                                            <article key={student.enrollmentId} className="rounded-lg border border-white/5 bg-white/[0.03] p-3">
+                                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                                    <div className="min-w-0">
+                                                        <p className="truncate text-sm font-black text-white">{studentName(student.student)}</p>
+                                                        <p className="truncate text-xs text-gray-500">{student.student.email}</p>
+                                                        <p className="mt-1 text-[11px] font-bold text-gray-400">
+                                                            {text('المحاولات', 'Attempts')}: {student.attempts.length}
+                                                            {student.attemptsAllowed === null ? ` / ∞` : ` / ${student.attemptsAllowed}`}
+                                                            {student.extraAttempts > 0 && ` · ${text('إضافية', 'extra')}: ${student.extraAttempts}`}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex shrink-0 flex-wrap gap-2">
+                                                        <button
+                                                            type="button"
+                                                            disabled={attemptActionKey === actionKey}
+                                                            onClick={() => void manageStudentAttempts(quiz, student, 'grant')}
+                                                            className="inline-flex items-center gap-1 rounded-lg bg-brand-gold/10 px-2.5 py-2 text-[11px] font-black text-brand-gold-light hover:bg-brand-gold/20 disabled:opacity-50"
+                                                        >
+                                                            {attemptActionKey === actionKey ? <Loader size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+                                                            {text('منح محاولة', 'Grant attempt')}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            disabled={attemptActionKey === actionKey}
+                                                            onClick={() => void manageStudentAttempts(quiz, student, 'reset')}
+                                                            className="rounded-lg bg-red-500/10 px-2.5 py-2 text-[11px] font-black text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+                                                        >
+                                                            {text('تصفير المحاولات', 'Reset attempts')}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-3 space-y-1.5">
+                                                    {student.attempts.map((attempt, index) => (
+                                                        <div key={attempt.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-black/10 px-2.5 py-2 text-[11px]">
+                                                            <span className="font-bold text-gray-300">
+                                                                {text('محاولة', 'Attempt')} {student.attempts.length - index} · {new Date(attempt.submittedAt).toLocaleString(isAr ? 'ar' : 'en-US')}
+                                                            </span>
+                                                            <span className={`font-black ${attempt.passed ? 'text-emerald-300' : 'text-red-300'}`}>
+                                                                {attempt.score}% · {attempt.passed ? text('ناجح', 'Passed') : text('غير مجتاز', 'Not passed')}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </article>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </article>
                     ))}
                 </div>

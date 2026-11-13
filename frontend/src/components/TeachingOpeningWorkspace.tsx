@@ -8,6 +8,7 @@ import { useFetchData } from '@/lib/useFetchData';
 import { useI18n } from '@/lib/i18n-context';
 import { useAuth } from '@/lib/auth-context';
 import RosterGrades from '@/components/RosterGrades';
+import InstructorGradebook from '@/components/InstructorGradebook';
 import TasksPanel from '@/components/TasksPanel';
 import CourseChat from '@/components/CourseChat';
 import LessonExplorer from '@/components/LessonExplorer';
@@ -15,7 +16,7 @@ import InstructorAnnouncements from '@/components/InstructorAnnouncements';
 import AcademicCalendar from '@/components/AcademicCalendar';
 import LiveSessionManager from '@/components/LiveSessionManager';
 import InstructorQuizManager from '@/components/InstructorQuizManager';
-import { Settings2, ClipboardList, MessagesSquare, BarChart3, Flag, Users, BookOpen, Hash, ArrowLeft, Megaphone, Calendar, Video, Pencil, Loader } from 'lucide-react';
+import { Settings2, ClipboardList, MessagesSquare, BarChart3, Flag, Users, BookOpen, Hash, ArrowLeft, Megaphone, Calendar, Video, Pencil, Loader, GraduationCap } from 'lucide-react';
 import OpeningContentEditor from '@/components/OpeningContentEditor';
 
 interface MyOpening {
@@ -84,9 +85,9 @@ interface SyllabusData {
     }[] | null;
 }
 
-type Tab = 'roster' | 'tasks' | 'announcements' | 'calendar' | 'sessions' | 'content' | 'quizzes' | 'chat' | 'analytics';
+type Tab = 'roster' | 'gradebook' | 'tasks' | 'announcements' | 'calendar' | 'sessions' | 'content' | 'quizzes' | 'chat' | 'analytics';
 
-const VALID_TABS: Tab[] = ['roster', 'tasks', 'announcements', 'calendar', 'sessions', 'content', 'quizzes', 'chat', 'analytics'];
+const VALID_TABS: Tab[] = ['roster', 'gradebook', 'tasks', 'announcements', 'calendar', 'sessions', 'content', 'quizzes', 'chat', 'analytics'];
 
 const statusColors: Record<string, string> = {
     DRAFT: 'bg-gray-500/10 text-gray-400 border border-gray-500/20',
@@ -144,6 +145,7 @@ export default function TeachingOpeningWorkspace() {
     const canManageQuizzes = canManageOpeningContent;
     const availableTabs: Tab[] = opening ? [
         ...(opening.access.canGrade ? ['roster' as const] : []),
+        ...(opening.access.canGrade ? ['gradebook' as const] : []),
         ...(opening.access.canManageTasks || opening.access.canGrade ? ['tasks' as const] : []),
         ...(opening.access.canManageAnnouncements ? ['announcements' as const] : []),
         ...(opening.access.isPrimaryInstructor ? ['calendar' as const] : []),
@@ -158,6 +160,7 @@ export default function TeachingOpeningWorkspace() {
         : (availableTabs[0] ?? 'roster');
     const tabLabel = (key: Tab) => ({
         roster: isAr ? 'الطلاب والدرجات' : 'Roster',
+        gradebook: isAr ? 'سجل الدرجات الشامل' : 'Gradebook',
         tasks: t('tasks.tasks_title'),
         announcements: isAr ? 'الإعلانات' : 'Announcements',
         calendar: isAr ? 'التقويم' : 'Calendar',
@@ -359,6 +362,7 @@ export default function TeachingOpeningWorkspace() {
 
                 <div className="hidden min-w-0 w-full items-center gap-1 overflow-x-auto rounded-2xl border border-white/5 bg-brand-navy-dark p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex">
                     {availableTabs.includes('roster') && tabBtn('roster', <Settings2 size={16} />, isAr ? 'الطلاب والدرجات' : 'Roster')}
+                    {availableTabs.includes('gradebook') && tabBtn('gradebook', <GraduationCap size={16} />, isAr ? 'سجل الدرجات' : 'Gradebook')}
                     {availableTabs.includes('tasks') && tabBtn('tasks', <ClipboardList size={16} />, t('tasks.tasks_title'))}
                     {availableTabs.includes('announcements') && tabBtn('announcements', <Megaphone size={16} />, isAr ? 'الإعلانات' : 'Announcements')}
                     {availableTabs.includes('calendar') && tabBtn('calendar', <Calendar size={16} />, isAr ? 'التقويم' : 'Calendar')}
@@ -372,6 +376,7 @@ export default function TeachingOpeningWorkspace() {
                 </div>
 
                 {tab === 'roster' && !!openingId && <RosterGrades openingId={String(openingId)} />}
+                {tab === 'gradebook' && !!openingId && <InstructorGradebook openingId={String(openingId)} />}
                 {tab === 'tasks' && !!openingId && opening && (
                     <TasksPanel
                         openingId={String(openingId)}

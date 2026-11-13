@@ -185,13 +185,25 @@ describe('SECURITY: reading reviews requires standing on the submission', () => 
 
 describe('SECURITY: quiz answers are never handed back', () => {
     const build = () => {
-        let upserted: any;
+        let created: any;
+        const quizAttempt = {
+            count: async () => 0,
+            create: async (args: any) => {
+                created = args;
+                return { id: 'a1', ...args.data };
+            },
+        };
+        const quizAttemptGrant = {
+            findUnique: async () => null,
+        };
         const prisma = {
             quiz: {
                 findUnique: async () => ({
                     id: 'q1',
                     isPublished: true,
                     passScore: 70,
+                    maxAttempts: 1,
+                    moduleId: null,
                     courseId: 'course-1',
                     questions: [
                         { id: 'q1a', orderIndex: 0, correctIndex: 2, options: ['a', 'b', 'c', 'd'] },
@@ -202,13 +214,12 @@ describe('SECURITY: quiz answers are never handed back', () => {
             enrollment: {
                 findUnique: async () => ({ id: 'e1', studentId: 'student-a', courseId: 'course-1' }),
             },
-            quizAttempt: {
-                findUnique: async () => null,
-                upsert: async (a: any) => { upserted = a; return { id: 'a1' }; },
-            },
+            quizAttempt,
+            quizAttemptGrant,
+            $transaction: async (callback: (tx: any) => Promise<unknown>) => callback({ quizAttempt, quizAttemptGrant }),
         };
         const svc = new QuizzesService(prisma as never, gamification);
-        return { svc, upserted: () => upserted };
+        return { svc, created: () => created };
     };
 
     test('the per-question breakdown has no correctAnswer', async () => {

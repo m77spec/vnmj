@@ -72,7 +72,7 @@ export class LessonsService {
         courseId,
         OR: openingId ? [{ openingId: null }, { openingId }] : [{ openingId: null }],
       },
-      orderBy: { orderIndex: 'asc' },
+      orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
       include: {
         outcomes: { orderBy: { createdAt: 'asc' } },
         openingContents: openingId ? { where: { openingId } } : false,
@@ -277,7 +277,11 @@ export class LessonsService {
   private async moduleRequirements(
     courseId: string,
     enrollment: { id: string; openingId: string | null },
-  ): Promise<Map<string, { pendingTasks: number; failedQuizzes: number }>> {
+  ): Promise<Map<string, {
+    pendingTasks: number;
+    failedQuizzes: number;
+    lockedByQuiz?: { id: string; titleAr: string; titleEn: string };
+  }>> {
     // Assignments belong to an opening. A legacy `openingId = NULL` row cannot
     // be scoped to one, so counting every opening's tasks would invent work
     // this student was never given; there is nothing to check in that case.
@@ -299,12 +303,22 @@ export class LessonsService {
         OR: enrollment.openingId ? [{ openingId: null }, { openingId: enrollment.openingId }] : [{ openingId: null }],
       },
       select: {
+        id: true,
         moduleId: true,
+        titleAr: true,
+        titleEn: true,
+        gateNextLessons: true,
         attempts: { where: { enrollmentId: enrollment.id }, select: { passed: true } },
       },
     });
 
-    const map = new Map<string, { pendingTasks: number; failedQuizzes: number }>();
+    const modules = await this.listCourseModules(courseId, enrollment.openingId);
+    const moduleIndexes = new Map(modules.map((module, index) => [module.id, index]));
+    const map = new Map<string, {
+      pendingTasks: number;
+      failedQuizzes: number;
+      lockedByQuiz?: { id: string; titleAr: string; titleEn: string };
+    }>();
     const slot = (moduleId: string) => {
       let entry = map.get(moduleId);
       if (!entry) {
@@ -319,6 +333,13 @@ export class LessonsService {
     }
     for (const q of quizzes) {
       if (!q.attempts.some((a: { passed: boolean }) => a.passed)) slot(q.moduleId as string).failedQuizzes += 1;
+      if (!q.gateNextLessons || !q.moduleId || q.attempts.some((attempt) => attempt.passed)) continue;
+      const gateIndex = moduleIndexes.get(q.moduleId);
+      if (gateIndex === undefined) continue;
+      for (const module of modules.slice(gateIndex + 1)) {
+        const entry = slot(module.id);
+        entry.lockedByQuiz ??= { id: q.id, titleAr: q.titleAr, titleEn: q.titleEn };
+      }
     }
     return map;
   }
@@ -347,18 +368,19 @@ export class LessonsService {
 
     const list = modules.map((m: any) => {
       const owed = requirements.get(m.id) ?? { pendingTasks: 0, failedQuizzes: 0 };
+      const locked = !!owed.lockedByQuiz;
       return {
         id: m.id,
         titleAr: m.titleAr,
         titleEn: m.titleEn,
         descriptionAr: m.descriptionAr,
         descriptionEn: m.descriptionEn,
-        videoUrl: canViewAssets ? m.videoUrl : null,
+        videoUrl: canViewAssets && !locked ? m.videoUrl : null,
         orderIndex: m.orderIndex,
         isFree: m.isFree,
         durationMinutes: m.durationMinutes,
-        files: canViewAssets ? (m.files ?? null) : [],
-        links: canViewAssets ? (m.links ?? null) : [],
+        files: canViewAssets && !locked ? (m.files ?? null) : [],
+        links: canViewAssets && !locked ? (m.links ?? null) : [],
         chapterId: m.chapterId,
         outcomes: m.outcomes,
         completed: completedMap.has(m.id),
@@ -367,7 +389,9 @@ export class LessonsService {
         // dead button, and so a client cannot pretend the gate does not exist.
         pendingTasks: owed.pendingTasks,
         failedQuizzes: owed.failedQuizzes,
-        canComplete: owed.pendingTasks === 0 && owed.failedQuizzes === 0,
+        locked,
+        lockedByQuiz: owed.lockedByQuiz ?? null,
+        canComplete: !locked && owed.pendingTasks === 0 && owed.failedQuizzes === 0,
       };
     });
 
@@ -503,6 +527,15 @@ export class LessonsService {
     }
 
     const owed = (await this.moduleRequirements(enrollment.courseId, enrollment)).get(moduleId);
+    if (owed?.lockedByQuiz) {
+      throw new ConflictException({
+        message: 'Pass the required quiz before opening this lesson',
+        code: 'LESSON_LOCKED_BY_QUIZ',
+        quizId: owed.lockedByQuiz.id,
+        quizTitleAr: owed.lockedByQuiz.titleAr,
+        quizTitleEn: owed.lockedByQuiz.titleEn,
+      });
+    }
     if (owed && (owed.pendingTasks > 0 || owed.failedQuizzes > 0)) {
       throw new ConflictException({
         message: 'Finish the required work for this lesson first',

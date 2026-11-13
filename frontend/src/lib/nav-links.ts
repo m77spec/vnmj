@@ -58,11 +58,20 @@ export function buildPublicNavLinks(t: (key: string) => string): NavLink[] {
     ];
 }
 
+export function dedupeNavLinks(links: NavLink[]): NavLink[] {
+    const seen = new Set<string>();
+    return links.filter((link) => {
+        if (seen.has(link.href)) return false;
+        seen.add(link.href);
+        return true;
+    });
+}
+
 export function buildAuthenticatedPublicNavLinks(t: (key: string) => string, role: string): NavLink[] {
-    return buildPublicNavLinks(t).filter((link) => (
+    return dedupeNavLinks(buildPublicNavLinks(t).filter((link) => (
         !(role === 'STUDENT' && link.href === '/courses')
         && !(role === 'INSTRUCTOR' && link.href === '/join-as-instructor')
-    ));
+    )));
 }
 
 export function isNavLinkActive(pathname: string, link: NavLink, links: NavLink[]) {

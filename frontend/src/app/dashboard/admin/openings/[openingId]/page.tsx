@@ -221,6 +221,8 @@ export default function OpeningOversightPage() {
                 if (row.action === 'quiz_created') return isAr ? 'أنشأ اختبارًا' : 'Created a quiz';
                 if (row.action === 'quiz_updated') return isAr ? 'عدّل اختبارًا' : 'Updated a quiz';
                 if (row.action === 'quiz_deleted') return isAr ? 'حذف اختبارًا' : 'Deleted a quiz';
+                if (row.action === 'quiz_attempt_granted') return isAr ? 'منح محاولة اختبار إضافية لطالب' : 'Granted a student an extra quiz attempt';
+                if (row.action === 'quiz_attempts_reset') return isAr ? 'صفّر محاولات اختبار طالب' : 'Reset a student’s quiz attempts';
                 if (row.action === 'task_created') return isAr ? 'أنشأ واجبًا' : 'Created an assignment';
                 if (row.action === 'task_updated') return isAr ? 'عدّل واجبًا' : 'Updated an assignment';
                 if (row.action === 'task_deleted') return isAr ? 'حذف واجبًا' : 'Deleted an assignment';

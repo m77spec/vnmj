@@ -32,6 +32,7 @@ interface QuizData {
     descriptionAr?: string | null;
     descriptionEn?: string | null;
     passScore?: number;
+    maxAttempts?: number | null;
     questions: QuizQuestion[];
 }
 
@@ -40,6 +41,9 @@ interface PreviousAttempt {
     score: number;
     passed: boolean;
     submittedAt?: string;
+    attemptsUsed?: number;
+    attemptsAllowed?: number | null;
+    canAttempt?: boolean;
 }
 
 interface AttemptDetail {
@@ -51,6 +55,8 @@ interface AttemptDetail {
 interface AttemptResult {
     score: number;
     passed: boolean;
+    attemptsUsed: number;
+    attemptsAllowed: number | null;
     details?: AttemptDetail[];
     attempt?: PreviousAttempt | null;
     answersSnapshot?: Record<string, number[]>;
@@ -95,6 +101,7 @@ export default function InteractiveQuiz({ quizId, enrollmentId, onComplete }: Pr
     const [loaded, setLoaded] = useState<{ id: string; quiz: QuizData } | null>(null);
     const [failure, setFailure] = useState<{ id: string; message: string } | null>(null);
     const [previous, setPrevious] = useState<PreviousAttempt | null>(null);
+    const [attemptStatus, setAttemptStatus] = useState<Pick<PreviousAttempt, 'attemptsUsed' | 'attemptsAllowed' | 'canAttempt'> | null>(null);
 
     const loading = !!quizId && (!loaded || loaded.id !== quizId) && (!failure || failure.id !== quizId);
     const error = failure && failure.id === quizId ? failure.message : null;
@@ -120,16 +127,27 @@ export default function InteractiveQuiz({ quizId, enrollmentId, onComplete }: Pr
                 setLoaded({ id: quizId, quiz: res.data });
                 try {
                     const att = await api.get(`/quizzes/${quizId}/my-attempt`);
-                    if (active) setPrevious(att.data || null);
+                    if (active) {
+                        const status = att.data as PreviousAttempt | null;
+                        const defaultLimit = res.data.maxAttempts === undefined ? 1 : res.data.maxAttempts;
+                        setAttemptStatus(status ? {
+                            attemptsUsed: status.attemptsUsed ?? 0,
+                            attemptsAllowed: status.attemptsAllowed === undefined ? defaultLimit : status.attemptsAllowed,
+                            canAttempt: status.canAttempt ?? true,
+                        } : { attemptsUsed: 0, attemptsAllowed: defaultLimit, canAttempt: true });
+                        setPrevious(status?.id ? status : null);
+                    }
                 } catch {
-                    /* no previous attempt */
+                    if (active) {
+                        toast.error(isAr ? 'تعذر تحميل حالة محاولات الاختبار.' : 'Could not load quiz attempt status.');
+                    }
                 }
             } catch (err) {
                 if (active) setFailure({ id: quizId, message: getErrorMessage(err) || t('common.error') });
             }
         })();
         return () => { active = false; };
-    }, [quizId, t]);
+    }, [quizId, t, isAr]);
 
     const questions = useMemo(() => quiz?.questions ?? [], [quiz]);
     const answeredCount = questions.filter((q) => (answers[q.id]?.length ?? 0) > 0).length;
@@ -166,9 +184,17 @@ export default function InteractiveQuiz({ quizId, enrollmentId, onComplete }: Pr
             setResult({ ...data, answersSnapshot: { ...answers } });
             setPrevious({
                 id: data.attempt?.id || '',
-                score: Number(data.score ?? data.attempt?.score ?? 0),
-                passed: !!data.passed,
+                score: Math.max(previous?.score ?? 0, Number(data.score ?? data.attempt?.score ?? 0)),
+                passed: !!previous?.passed || !!data.passed,
                 submittedAt: data.attempt?.submittedAt,
+                attemptsUsed: data.attemptsUsed,
+                attemptsAllowed: data.attemptsAllowed,
+                canAttempt: data.attemptsAllowed === null || (data.attemptsAllowed !== undefined && data.attemptsUsed < data.attemptsAllowed),
+            });
+            setAttemptStatus({
+                attemptsUsed: data.attemptsUsed,
+                attemptsAllowed: data.attemptsAllowed,
+                canAttempt: data.attemptsAllowed === null || (data.attemptsAllowed !== undefined && data.attemptsUsed < data.attemptsAllowed),
             });
             setPhase('results');
             toast.success(data.passed
@@ -256,12 +282,19 @@ export default function InteractiveQuiz({ quizId, enrollmentId, onComplete }: Pr
                         <p className="text-ink-subtle text-sm font-bold">
                             {isAr ? 'درجة النجاح' : 'Pass score'}: {passScore}% · {isAr ? 'إجابات صحيحة' : 'Correct answers'}: {correctCount}/{questions.length}
                         </p>
-                        <button
-                            onClick={startQuiz}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-brand-gold/10 text-gold-ink border border-brand-gold/30 hover:bg-brand-gold/20 transition"
-                        >
-                            <RotateCcw size={14} /> {isAr ? 'إعادة المحاولة' : 'Retake quiz'}
-                        </button>
+                        {attemptStatus?.canAttempt !== false && (
+                            <button
+                                onClick={startQuiz}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-brand-gold/10 text-gold-ink border border-brand-gold/30 hover:bg-brand-gold/20 transition"
+                            >
+                                <RotateCcw size={14} /> {isAr ? 'إعادة المحاولة' : 'Retake quiz'}
+                            </button>
+                        )}
+                        {attemptStatus?.canAttempt === false && (
+                            <p className="text-sm font-bold text-ink-subtle">
+                                {isAr ? 'انتهت المحاولات المتاحة. تواصل مع المدرّس لطلب محاولة إضافية.' : 'No attempts remain. Contact your instructor to request another attempt.'}
+                            </p>
+                        )}
                     </div>
                 </div>
 
@@ -462,11 +495,20 @@ export default function InteractiveQuiz({ quizId, enrollmentId, onComplete }: Pr
 
             <button
                 onClick={startQuiz}
-                className="inline-flex items-center gap-2 px-8 py-3 rounded-xl font-black bg-brand-gold text-ink-on-gold hover:bg-brand-gold-light transition"
+                disabled={attemptStatus?.canAttempt === false}
+                className="inline-flex items-center gap-2 px-8 py-3 rounded-xl font-black bg-brand-gold text-ink-on-gold hover:bg-brand-gold-light transition disabled:cursor-not-allowed disabled:opacity-50"
             >
                 {previous ? <RotateCcw size={16} /> : <ListChecks size={16} />}
-                {previous ? (isAr ? 'إعادة المحاولة' : 'Retake quiz') : (isAr ? 'ابدأ الاختبار' : 'Start quiz')}
+                {attemptStatus?.canAttempt === false
+                    ? (isAr ? 'انتهت المحاولات' : 'No attempts left')
+                    : previous ? (isAr ? 'إعادة المحاولة' : 'Retake quiz') : (isAr ? 'ابدأ الاختبار' : 'Start quiz')}
             </button>
+            {attemptStatus && (
+                <p className="text-[11px] text-ink-subtle font-bold">
+                    {isAr ? 'المحاولات المستخدمة' : 'Attempts used'}: {attemptStatus.attemptsUsed ?? 0}
+                    {attemptStatus.attemptsAllowed === null ? ' / ∞' : ` / ${attemptStatus.attemptsAllowed ?? 1}`}
+                </p>
+            )}
             {previous && (
                 <p className="text-[11px] text-ink-subtle font-bold">
                     {isAr ? 'يتم الاحتفاظ بأفضل درجة لديك' : 'Your best score is kept'}

@@ -387,6 +387,8 @@ model CourseOpening {
   messages         Message[]
   studentMessageRequests StudentMessageRequest[]
   assessments      Assessment[]
+  gradeCategories  GradeCategory[]
+  gradebookItems   GradebookItem[]
   closeRequests    CloseRequest[]
   tasks            CourseTask[]
   payments         Payment[]
@@ -617,12 +619,14 @@ model Enrollment {
   reviewedBy User?         @relation("EnrollmentReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
 
   grades           Grade[]
+  gradeOverrides   GradeOverride[]
   submissions      TaskSubmission[]
   payments         Payment[]
   lessonProgress   LessonProgress[]
   courseEvaluation CourseEvaluation?
   lessonNotes      LessonNote[]
   quizAttempts     QuizAttempt[]
+  quizAttemptGrants QuizAttemptGrant[]
   attendance       SessionAttendance[]
 
   // A student can only enroll in a specific course once (or have one active record)
@@ -966,6 +970,39 @@ model Assessment {
   grades Grade[]
 }
 
+model GradeCategory {
+  id            String   @id @default(uuid())
+  nameAr        String
+  nameEn        String
+  weightPercent Float
+  orderIndex    Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  openingId String
+  opening   CourseOpening @relation(fields: [openingId], references: [id], onDelete: Cascade)
+
+  items GradebookItem[]
+
+  @@index([openingId, orderIndex])
+}
+
+model GradebookItem {
+  id         String   @id @default(uuid())
+  sourceType String
+  sourceId   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  openingId  String
+  opening    CourseOpening  @relation(fields: [openingId], references: [id], onDelete: Cascade)
+  categoryId String?
+  category   GradeCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@unique([openingId, sourceType, sourceId])
+  @@index([categoryId])
+}
+
 model Grade {
   id        String   @id @default(uuid())
   score     Float
@@ -980,6 +1017,24 @@ model Grade {
   assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
 
   @@unique([enrollmentId, assessmentId])
+}
+
+model GradeOverride {
+  id           String   @id @default(uuid())
+  sourceType   String
+  sourceId     String
+  score        Float
+  originalScore Float?
+  notes        String?
+  updatedById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, sourceType, sourceId])
+  @@index([sourceType, sourceId])
 }
 
 model Message {
@@ -1584,6 +1639,8 @@ model Quiz {
   descriptionAr String?
   descriptionEn String?
   passScore     Int      @default(60)
+  maxAttempts   Int?     @default(1)
+  gateNextLessons Boolean @default(false)
   isPublished   Boolean  @default(true)
   isFinal       Boolean  @default(false)
   orderIndex    Int      @default(0)
@@ -1599,6 +1656,7 @@ model Quiz {
 
   questions QuizQuestion[]
   attempts  QuizAttempt[]
+  attemptGrants QuizAttemptGrant[]
 
   @@index([courseId])
   @@index([openingId])
@@ -1625,6 +1683,18 @@ model QuizAttempt {
   passed      Boolean
   answers     Json
   submittedAt DateTime @default(now())
+
+  quizId       String
+  quiz         Quiz       @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@index([quizId, enrollmentId, submittedAt])
+}
+
+model QuizAttemptGrant {
+  id            String @id @default(uuid())
+  extraAttempts Int    @default(0)
 
   quizId       String
   quiz         Quiz       @relation(fields: [quizId], references: [id], onDelete: Cascade)
