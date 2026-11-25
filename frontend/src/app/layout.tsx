@@ -8,6 +8,7 @@ import { ThemeProvider } from '@/lib/theme-context';
 import { Toaster } from 'react-hot-toast';
 import { SITE_URL } from '@/lib/deployment-urls';
 import CookieBanner from '@/components/CookieBanner';
+import AnalyticsTracker from '@/components/AnalyticsTracker';
 import JsonLd from '@/components/JsonLd';
 import GlobalBackButton from '@/components/GlobalBackButton';
 import OperationsTracker from '@/components/OperationsTracker';
@@ -118,6 +119,7 @@ export default async function RootLayout({
                   for refunds/certificates/payment-gateway actions. */}
               <StepUpProvider />
               {children}
+              <AnalyticsTracker />
               {/* Mounted app-wide: the operations center records every visitor,
                   signed in or not, so this cannot live inside an admin tree. */}
               <OperationsTracker />

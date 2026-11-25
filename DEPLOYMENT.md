@@ -2,13 +2,64 @@
 
 LaxaLab supports three deployment targets:
 
-1. **Render Blueprint** (`render.yaml`) — free evaluation deployment; not for production data.
-2. **Railway (managed)** — no servers to run or patch.
-3. **Self-hosted Docker Compose** (`docker-compose.prod.yml`) — full TLS via
+1. **Render Blueprint** (`render.yaml`) — deploys the APIs, database, cache, and
+   (optionally) both frontends.
+2. **Cloudflare Workers** (`frontend/wrangler.*.jsonc`) — deploys the learner
+   and admin Next.js frontends separately; the APIs can remain on Render.
+3. **Railway (managed)** — no servers to run or patch.
+4. **Self-hosted Docker Compose** (`docker-compose.prod.yml`) — full TLS via
    Let's Encrypt, nginx in front of the Next.js frontend and NestJS backend.
 
-Pick one per environment. The environment variables are the same either way
-(see `.env.production.example`).
+Pick one per environment. Use `.env.production.example` for the self-hosted target and the service-specific
+checklists below for managed deployments.
+
+## Cloudflare Workers: frontend deployment
+
+The Next.js frontend uses dynamic routes, cookies, and middleware, so deploy it
+to **Cloudflare Workers with `@opennextjs/cloudflare`**, not as a static Pages
+site. Two independent Workers are configured:
+
+- `laxalab-student` serves the student and instructor platform.
+- `laxalab-admin` serves the admin console.
+
+The APIs, PostgreSQL, Redis, and uploaded files remain on their existing
+providers. The Worker configs currently point at the Render APIs and the
+existing frontend domains. Each Worker uses the repository root with
+`frontend/` as its root directory, Node.js compatibility, and its own Wrangler
+config (`wrangler.learner.jsonc` or `wrangler.admin.jsonc`). Cloudflare builds
+need Node.js 22.12 or newer for the Wrangler CLI.
+
+### Connect and deploy
+
+1. Push the Cloudflare deployment files and frontend dependency lockfile to a
+   GitHub branch Cloudflare can access. Connect GitHub in Cloudflare Workers.
+2. Create two Workers from the same repository. For each, set the root
+   directory to `frontend` and set the build command to `npm ci` followed by
+   the matching `npm run cf:build:learner` or `npm run cf:build:admin`
+   command. Set the deploy command to `npm run cf:deploy:learner` or
+   `npm run cf:deploy:admin`, respectively.
+3. In each Worker build's environment variables, set
+   `NEXT_PUBLIC_APP_MODE` (`learner` or `admin`), `NEXT_PUBLIC_API_URL` to
+   that surface's public Render API URL, and `NEXT_PUBLIC_SITE_URL` to its
+   final HTTPS domain. These `NEXT_PUBLIC_*` values are baked into the app at
+   build time; set them separately for both Workers and rebuild after changing
+   them. `wrangler.*.jsonc` also declares the corresponding public runtime
+   values and surface mode.
+4. Deploy to the `workers.dev` address first. In Cloudflare, attach the
+   intended custom domain to each Worker (learner: `laxalab.com` and optionally
+   `www.laxalab.com`; admin: `m.o2.h.laxalab.com`) and confirm DNS. Update
+   `NEXT_PUBLIC_SITE_URL` and rebuild if the final domain differs.
+5. Add each final frontend origin to `CORS_ORIGINS` on its matching Render API
+   service if it is not already allowed. The current Render config already
+   allows the documented learner and admin domains. Test login, locale routing,
+   dashboard navigation, uploads, and API calls on both Workers.
+
+For a local command-line deployment instead of Git integration, run
+`npx wrangler login` from `frontend/`, then build and deploy each Worker using
+the matching `cf:build:*` and `cf:deploy:*` scripts. Build-time variables must
+be set in the shell before each build. Do not copy Render API secrets into
+Cloudflare: the browser frontends only need the public API URLs; private
+integration secrets remain on the API services.
 
 ## Target 1: Render (free evaluation)
 
@@ -30,7 +81,20 @@ server output so the production server can serve its JavaScript, CSS, and public
 assets after deployment. The start command binds the server to `0.0.0.0` so
 Render's proxy can reach the process inside its container.
 
-### Before creating the Blueprint
+### Google Analytics 4
+
+The learner frontend supports GA4 page views and key funnel events. Set
+`NEXT_PUBLIC_GA4_ID` to the property's `G-...` Measurement ID on the
+`laxalab-web-learner` Render service, then redeploy; Next.js embeds this public
+configuration during the build. GA4 loads only after a visitor grants analytics
+consent. Page views, sign-up, login, course views, enrollment checkout attempts,
+and contact leads are sent without personal identifiers. Public-page button and
+link clicks are grouped by their visible label; dashboard clicks are excluded.
+Configure Enhanced Measurement in GA4 for automatic scroll and outbound-click events. Enrollment
+applications awaiting manual payment approval are not reported as completed
+purchases.
+
+### Re-creating the Blueprint in another Render workspace
 
 1. Create a Cloudflare R2 bucket and an API token with read/write access to that
    bucket. Record the S3 endpoint (`https://<account-id>.r2.cloudflarestorage.com`),
@@ -38,13 +102,95 @@ Render's proxy can reach the process inside its container.
 2. Confirm that your Render workspace has no other free PostgreSQL database or
    Key Value instance; Render limits each workspace to one active free instance
    of each type.
-3. Push this repository and `render.yaml` to GitHub.
-4. In Render, choose **New → Blueprint**, connect `MMMHH5/mo2`, and select the
-   branch containing this file. Review the services and enter the R2 values
-   when prompted for both API services (use the same bucket and token). Render
-   generates a separate JWT secret for each API.
+3. Push this repository, including `render.yaml`, to GitHub. The existing
+   Render Blueprint is linked to `MMMHH5/ss22`, branch `render-deploy`.
+4. In the new Render workspace, choose **New → Blueprint**, connect
+   `MMMHH5/ss22`, and select `render-deploy` (or the branch containing this
+   file). Review the six resources before applying the Blueprint. Enter the R2
+   endpoint, bucket, access key ID, and secret access key for both API services
+   (use the same bucket and token). Also supply the Google OAuth credentials
+   and any optional Sentry and frontend analytics values you use. Render
+   generates a separate JWT secret for each API; never copy JWT secrets between
+   environments.
 5. After the deploy completes, test both frontend URLs and each API's
    `/health` endpoint. Check the API logs for successful database migrations.
+
+### Deployment handoff: what to save before moving
+
+The repository saves the application code, dependency lockfiles, Prisma
+migrations, Docker configuration, and the Render service topology in
+`render.yaml`. The current Render Blueprint is `laxalab-platforms`
+(`exs-dbisko6tlv9c73bk6rig`), linked to `MMMHH5/ss22` on `render-deploy`.
+Its resources are the four web services listed above, `laxalab-postgres`, and
+`laxalab-redis`. These identifiers describe the current workspace only; a new
+workspace creates its own resources and URLs.
+
+The Blueprint is **not** a backup. It does not contain secret values, database
+records, or files stored in R2. Before access to the old workspace is lost:
+
+1. In your password manager or encrypted vault, create a record named
+   `LaxaLab — Render deployment — <environment>` (for example,
+   `LaxaLab — Render deployment — production`). Use this guide as the
+   non-secret reference for that record. Save the current values of secret
+   environment variables in the vault, not in this repository. Render's
+   `sync: false` entries are prompts for values and do not save those values
+   in this repository. Do not copy
+   `.env`, `.env.production`, `.seed-creds`, passwords, tokens, or connection
+   strings into Git, this guide, or chat. If an old secret is unavailable,
+   rotate/create a replacement with its provider.
+2. Record the domains and DNS provider/account, Google OAuth client and its
+   authorized callback URL, Stripe webhook configuration, email provider,
+   Cloudflare account/bucket and API token, and any Sentry/GA4 project IDs.
+   Keep credentials and recovery codes in the vault, not in this checklist.
+3. If preserving live data, make and verify a PostgreSQL backup and copy all
+   objects from the old R2 bucket to the new bucket, retaining each object's
+   exact key (including `uploads/...`). A new Blueprint creates an empty
+   database and bucket settings alone do not copy files. Redis contains
+   disposable cache/rate-limit data and does not need migration.
+4. Plan a maintenance window for a live move: stop writes to the old app,
+   take the final database backup, restore it to the new database, copy/check
+   R2 objects, and validate the new services before changing DNS or directing
+   users to them. Do not point production traffic at an empty database or
+   incomplete file store.
+
+#### Render environment-variable checklist
+
+Set these in Render's environment settings, not in committed files. Resource
+references and generated values are already described in `render.yaml`.
+
+| Service | Variables to set or review |
+|---|---|
+| `laxalab-api-public` | Required integrations: `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`. Google sign-in: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`. Set `FRONTEND_URL` and `CORS_ORIGINS` to the new learner site origins. If enabled: `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`; `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`; `ADMIN_EMAIL`; `SENTRY_DSN`, `SENTRY_TRACES_SAMPLE_RATE`. |
+| `laxalab-api-admin` | Required integrations: the same four R2 values. Set `FRONTEND_URL` and `CORS_ORIGINS` to the new admin site origin. If enabled: SMTP values above, `ADMIN_EMAIL`, `SENTRY_DSN`, `SENTRY_TRACES_SAMPLE_RATE`. Set `OPERATIONS_KEY` only for initial operations-password setup; remove it after setting the password in the app. |
+| `laxalab-web-learner` | `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_APP_MODE=learner`. Optional: `NEXT_PUBLIC_GA4_ID`, `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`. |
+| `laxalab-web-admin` | `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_APP_MODE=admin`. Optional: `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`. |
+
+Both APIs must use the **same** R2 bucket and credentials, PostgreSQL database,
+and Redis resource. Keep the two API `JWT_SECRET` values unique; Render
+generates them. `DATABASE_URL` and `REDIS_URL` are supplied by the Blueprint
+resource references. Add secrets only to the service(s) that need them.
+`NEXT_PUBLIC_*` settings are embedded at frontend build time, so changing a
+frontend URL or public monitoring/analytics ID requires rebuilding and
+redeploying that frontend.
+
+When service URLs or custom domains change, update the frontend API/site URLs,
+the matching API `FRONTEND_URL` and `CORS_ORIGINS`, Google OAuth's authorized
+redirect URI (`GOOGLE_CALLBACK_URL`), and the DNS/custom-domain settings.
+Register Stripe's webhook endpoint at
+`https://<new-public-api-host>/webhooks/stripe` and save its newly issued
+signing secret as `STRIPE_WEBHOOK_SECRET`. Verify each integration at its
+provider; changing a URL in Render alone does not update OAuth, Stripe, or DNS.
+
+#### Move verification
+
+- Confirm all four web services and both APIs are healthy; test `/health` on
+  each API and load both frontend sites.
+- Sign in with an admin account, verify two-factor setup, and test a learner
+  flow. The Blueprint does not copy user accounts or provision an admin.
+- Check API logs for completed database migrations and verify email, Google
+  sign-in, payments/webhooks, and file upload/download if those integrations
+  are enabled.
+- Verify representative database records and R2 files before switching traffic.
 
 ### Automated learning notifications
 

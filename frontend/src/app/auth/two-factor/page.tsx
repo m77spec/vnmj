@@ -51,7 +51,7 @@ function TwoFactorForm() {
                 userId: payload.sub,
                 email: payload.email,
                 role: payload.role as Role
-            }, refreshToken);
+            }, refreshToken, 'two_factor');
 
             const redirect = searchParams?.get('redirect') || '/dashboard';
             clearPostAuthRedirect();

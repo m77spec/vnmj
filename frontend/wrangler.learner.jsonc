@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "laxalab-student",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-03-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "workers_dev": true,
+  "vars": {
+    "APP_MODE": "learner",
+    "NEXT_PUBLIC_APP_MODE": "learner",
+    "NEXT_PUBLIC_API_URL": "https://laxalab-api-public.onrender.com",
+    "NEXT_PUBLIC_SITE_URL": "https://laxalab.com"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

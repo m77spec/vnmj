@@ -6,6 +6,7 @@ import { useAuth, Role } from '@/lib/auth-context';
 import { useI18n } from '@/lib/i18n-context';
 import { useTheme } from '@/lib/theme-context';
 import BackHomeButton from '@/components/BackHomeButton';
+import { trackEvent } from '@/lib/analytics';
 
 function SuccessHandler() {
     const router = useRouter();
@@ -41,11 +42,12 @@ function SuccessHandler() {
                 const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
                 const payload = JSON.parse(window.atob(base64));
 
+                if (completeProfile) trackEvent('sign_up', { method: 'google' });
                 login(token, {
                     userId: payload.sub,
                     email: payload.email,
                     role: payload.role as Role
-                }, refresh || undefined);
+                }, refresh || undefined, 'google');
 
                 router.push(completeProfile ? '/auth/complete-profile' : '/dashboard');
             } catch (err) {

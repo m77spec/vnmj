@@ -112,6 +112,8 @@ services:
         value: https://laxalab-api-public.onrender.com
       - key: NEXT_PUBLIC_SITE_URL
         value: https://laxalab-web-learner.onrender.com
+      - key: NEXT_PUBLIC_GA4_ID
+        sync: false
       - key: NEXT_PUBLIC_SENTRY_DSN
         sync: false
       - key: NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE

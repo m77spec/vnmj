@@ -13,6 +13,7 @@ import LanguageSwitcher from '@/components/LanguageSwitcher';
 import SelectField from '@/components/SelectField';
 import { useAuth } from '@/lib/auth-context';
 import { getPostAuthRedirect } from '@/lib/auth-redirect';
+import { trackEvent } from '@/lib/analytics';
 
 export default function RegisterPage() {
     return (
@@ -75,10 +76,12 @@ function RegisterForm() {
                 ...(formData.studyStatus && { studyStatus: formData.studyStatus }),
                 ...(formData.studyLevel && { studyLevel: formData.studyLevel }),
             });
+            trackEvent('sign_up', { method: 'email' });
             toast.success(t('auth.registration_success'));
             router.push(`/login?verifyEmail=1&email=${encodeURIComponent(formData.email)}&redirect=${encodeURIComponent(redirect)}`);
         } catch (err) {
             if (isRegistrationEmailFailure(err)) {
+                trackEvent('sign_up', { method: 'email' });
                 toast.error(t('auth.verification_delivery_failed'));
                 router.push(`/login?verificationEmailFailed=1&email=${encodeURIComponent(formData.email)}&redirect=${encodeURIComponent(redirect)}`);
             } else {

@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 import path from "path";
 import { withSentryConfig } from "@sentry/nextjs/config";
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
+
+initOpenNextCloudflareForDev();
 
 const nextConfig: NextConfig = {
   output: 'standalone',

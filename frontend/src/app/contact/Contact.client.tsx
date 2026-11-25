@@ -7,6 +7,7 @@ import { useTheme } from '@/lib/theme-context';
 import MarketingShell from '@/components/MarketingShell';
 import { api, getErrorMessage } from '@/lib/api';
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL, SUPPORT_WHATSAPP_URL } from '@/lib/contact-details';
+import { trackEvent } from '@/lib/analytics';
 
 export default function ContactContent() {
     const { t, locale } = useI18n();
@@ -37,6 +38,7 @@ export default function ContactContent() {
                 subject,
                 message,
             });
+            trackEvent('generate_lead', { method: 'contact_form' });
             setSuccess(true);
             setName('');
             setEmail('');

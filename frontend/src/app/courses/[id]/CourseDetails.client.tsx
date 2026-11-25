@@ -27,6 +27,7 @@ import ReceiptDropzone from '@/components/payment/ReceiptDropzone';
 import EnrollSteps from '@/components/payment/EnrollSteps';
 import LoginPromptModal from '@/components/LoginPromptModal';
 import type { PublicInstructorCard } from '@/lib/public-instructor';
+import { trackEvent } from '@/lib/analytics';
 
 export interface Module {
     id: string;
@@ -57,6 +58,7 @@ export interface Opening {
     endDate?: string | null;
     enrollmentDeadline?: string | null;
     price: string;
+    currency?: string;
     priceOld?: string | null;
     maxStudents?: number | null;
     instructor?: PublicInstructorCard | null;
@@ -203,6 +205,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
     const [showTrailer, setShowTrailer] = useState(false);
     const { data: gateways, loading: gatewaysLoading } = useFetchData<PaymentGateway[]>('/payment-gateways');
     const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'grades' | 'chat' | 'roster'>('overview');
+    const lastViewedCourse = useRef<string | null>(null);
 
     // Prefer the server's verdict; fall back to `mode` for a payload that
     // predates the flag so a signed-in user is never left without the tab.
@@ -315,6 +318,20 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
     }, [id, t, user, initialCourse]);
 
     useEffect(() => {
+        if (!course || lastViewedCourse.current === course.id) return;
+        lastViewedCourse.current = course.id;
+        const opening = course.openings?.find((item) => item.status === 'OPEN') ?? course.openings?.[0];
+        trackEvent('view_item', {
+            currency: opening?.currency || 'SAR',
+            items: [{
+                item_id: course.id,
+                item_name: pick(course, 'title') || course.titleEn || course.titleAr,
+                ...(course.categoryEn ? { item_category: course.categoryEn } : {}),
+            }],
+        });
+    }, [course, pick]);
+
+    useEffect(() => {
         const intent = searchParams.get('intent');
         if (!user || !course || (intent !== 'enroll' && intent !== 'reserve')) return;
 
@@ -371,6 +388,11 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
             await api.post('/enrollments', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
+            trackEvent('enrollment_application_submitted', {
+                currency: selectedOpening.currency || 'SAR',
+                value: Number(coupon?.finalAmount ?? selectedOpening.price),
+                items: [{ item_id: id, item_name: course?.titleEn || course?.titleAr || id }],
+            });
             setCourse((current) => current ? {
                 ...current,
                 viewerAccess: {
@@ -426,6 +448,11 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
     };
 
     const handleEnrollClick = (target: Opening) => {
+        trackEvent('begin_checkout', {
+            currency: target.currency || 'SAR',
+            value: Number(target.price),
+            items: [{ item_id: id, item_name: course?.titleEn || course?.titleAr }],
+        });
         if (!user) {
             setLoginRedirectTo(`/courses/${id}?intent=enroll&openingId=${encodeURIComponent(target.id)}`);
             setShowLoginPrompt(true);

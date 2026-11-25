@@ -5,6 +5,14 @@ import { GamificationService } from '../gamification/gamification.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 type EvaluationAnswerInput = { questionId: string; value: unknown };
+type LegacyEvaluationInput = {
+  courseRating: number;
+  instructorRating: number;
+  commentAr?: string | null;
+  commentEn?: string | null;
+  comment?: string | null;
+};
+type EvaluationSubmissionInput = LegacyEvaluationInput | { answers: EvaluationAnswerInput[] };
 type EvaluationQuestionInput = {
   id?: string;
   promptAr: string;

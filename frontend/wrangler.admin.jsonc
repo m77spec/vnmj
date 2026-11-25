@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "laxalab-admin",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-03-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "workers_dev": true,
+  "vars": {
+    "APP_MODE": "admin",
+    "NEXT_PUBLIC_APP_MODE": "admin",
+    "NEXT_PUBLIC_API_URL": "https://laxalab-api-admin.onrender.com",
+    "NEXT_PUBLIC_SITE_URL": "https://m.o2.h.laxalab.com"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '@/lib/i18n-context';
 import { useTheme } from '@/lib/theme-context';
-import { hasAnsweredConsent, saveConsent, type ConsentPrefs } from '@/lib/consent';
+import { hasAnsweredConsent, readConsent, saveConsent, type ConsentPrefs } from '@/lib/consent';
 import { applyConsent } from '@/lib/analytics';
 import { api } from '@/lib/api';
 
@@ -18,6 +18,8 @@ export default function CookieBanner() {
     const [marketing, setMarketing] = useState(false);
 
     useEffect(() => {
+        const saved = readConsent();
+        if (saved) applyConsent(saved);
         const timer = window.setTimeout(() => {
             if (!hasAnsweredConsent()) setVisible(true);
         }, 800);

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, ReactNode, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
+import { trackEvent } from './analytics';
 
 export type Role = 'STUDENT' | 'INSTRUCTOR' | 'COURSE_MANAGER' | 'FINANCE' | 'ADMIN';
 
@@ -15,7 +16,7 @@ interface AuthContextType {
     user: User | null;
     token: string | null;
     isAuthenticated: boolean;
-    login: (token: string, user: User, refreshToken?: string) => void;
+    login: (token: string, user: User, refreshToken?: string, method?: 'password' | 'google' | 'two_factor') => void;
     logout: () => void;
 }
 
@@ -86,10 +87,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => window.removeEventListener('storage', onStorage);
     }, []);
 
-    const login = (newToken: string, newUser: User, refreshToken?: string) => {
+    const login = (newToken: string, newUser: User, refreshToken?: string, method: 'password' | 'google' | 'two_factor' = 'password') => {
         localStorage.setItem(TOKEN_KEY, newToken);
         if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken);
         localStorage.setItem(USER_KEY, JSON.stringify(newUser));
+        trackEvent('login', { method });
         emitAuthChange();
     };
 

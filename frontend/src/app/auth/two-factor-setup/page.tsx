@@ -76,7 +76,7 @@ function SetupForm() {
                 userId: payload.sub,
                 email: payload.email,
                 role: payload.role as Role
-            }, refreshToken);
+            }, refreshToken, 'two_factor');
 
             clearPostAuthRedirect();
             router.push(redirect);
