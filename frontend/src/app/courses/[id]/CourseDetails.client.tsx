@@ -526,7 +526,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
     const introVideo = getVideoUrl(course.introVideoUrl) || getVideoUrl(course.videoFileUrl);
 
     return (
-        <div className={`min-h-screen ${dark ? 'bg-surface-sunken' : 'bg-brand-white'} pb-20`}>
+        <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className={`min-h-screen overflow-x-hidden ${dark ? 'bg-surface-sunken' : 'bg-brand-white'} pb-20`}>
             <style>{`
                 html { scroll-behavior: smooth; }
                 @keyframes fadeInUp {
@@ -542,7 +542,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                 laid over the navy hero, so it needs the reverse mark and the
                 on-navy inks -- the primary mark and --ink-subtle links were dark
                 on dark. The dark theme's own surface already reads as navy. */}
-            <header className={`px-4 sm:px-6 md:px-8 h-16 sm:h-20 flex items-center justify-between border-b sticky top-0 z-50 ${dark ? 'border-white/10 bg-surface-sunken' : 'border-white/10 bg-ink/[0.45] backdrop-blur-md'}`}>
+            <header dir={locale === 'ar' ? 'rtl' : 'ltr'} className={`px-4 sm:px-6 md:px-8 h-16 sm:h-20 flex items-center justify-between border-b sticky top-0 z-50 ${dark ? 'border-white/10 bg-surface-sunken' : 'border-white/10 bg-ink/[0.45] backdrop-blur-md'}`}>
                 {/* Brand: this header used to draw a hand-rolled "L" tile plus
                     a typed `laxa|lab` wordmark, so the course page showed a
                     different identity from every other page. Use the real mark,
@@ -604,7 +604,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                 <div className="absolute bottom-0 start-1/3 w-80 h-80 bg-surface-raised rounded-full blur-3xl" aria-hidden />
                 <div className="absolute bottom-0 end-0 w-80 h-80 bg-brand-gold/5 rounded-full blur-3xl" aria-hidden />
 
-                <div className="relative max-w-6xl mx-auto px-4 sm:px-6 md:px-10 pt-8 sm:pt-16 md:pt-20 pb-10 sm:pb-24 md:pb-28 grid lg:grid-cols-[1.2fr_1fr] gap-8 sm:gap-10 md:gap-12 items-center">
+                <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className="relative max-w-6xl mx-auto px-4 sm:px-6 md:px-10 pt-8 sm:pt-16 md:pt-20 pb-10 sm:pb-24 md:pb-28 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-8 sm:gap-10 md:gap-12 items-center">
                     {/* Left */}
                     <div className="animate-fade-in-up">
                         {/* The hero panel is a fixed navy gradient: it is the same
@@ -614,7 +614,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                             the stat values at roughly 1.2:1 on #0a1c35. Every
                             colour inside this block is therefore one of the
                             theme-independent on-navy inks or a white tint. */}
-                        <nav className="flex items-center gap-2 text-xs font-bold text-brand-gold-light mb-6 flex-wrap">
+                        <nav className="flex items-center justify-center sm:justify-start gap-2 text-xs font-bold text-brand-gold-light mb-5 sm:mb-6 flex-wrap" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
                             <button onClick={() => router.push('/')} className="hover:text-white transition cursor-pointer">{t('landing.home')}</button>
                             <span className="text-white/40">/</span>
                             <button onClick={() => router.push('/courses')} className="hover:text-white transition cursor-pointer">{t('landing.explore_courses')}</button>
@@ -622,7 +622,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                             <span className="text-ink-on-navy truncate max-w-[60vw] sm:max-w-[200px]">{pick(course, 'title')}</span>
                         </nav>
 
-                        <div className="flex flex-wrap items-center gap-2 mb-5">
+                        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-5">
                             {pick(course, 'duration') && (
                                 <span className={`bg-brand-gold text-ink-on-gold px-3 py-1.5 rounded-full shadow-sm ${pillCaption}`}>
                                     {pick(course, 'duration')}
@@ -647,7 +647,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                             is navy in the light theme too, so the title needs the
                             same lift it has in the dark one. */}
                         <h1
-                            className="text-[1.75rem] leading-[1.18] sm:text-4xl md:text-5xl lg:text-6xl font-black text-ink-on-navy mb-4 sm:mb-5 sm:leading-[1.08] tracking-tight break-words"
+                            className="text-center sm:text-start text-[1.75rem] leading-[1.18] sm:text-4xl md:text-5xl lg:text-6xl font-black text-ink-on-navy mb-4 sm:mb-5 sm:leading-[1.08] tracking-tight break-words w-full"
                             style={{ textShadow: '0 2px 24px rgba(0,0,0,0.5)' }}
                         >
                             {pick(course, 'title')}
@@ -664,7 +664,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                             </span>
                         </div>
                         {(pick(course, 'excerpt') || pick(course, 'description')) && (
-                            <p className="text-base sm:text-lg md:text-xl text-ink-on-navy-muted max-w-2xl mb-6 sm:mb-8 font-medium leading-relaxed break-words">
+                            <p className="text-center sm:text-start text-base sm:text-lg md:text-xl text-ink-on-navy-muted max-w-2xl mb-6 sm:mb-8 mx-auto sm:mx-0 font-medium leading-relaxed break-words">
                                 {pick(course, 'excerpt') || pick(course, 'description')}
                             </p>
                         )}
@@ -704,7 +704,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                                     </div>
                                 </div>
                             ) : null}
-                            <div className={statCard}>
+                            <div className={`${statCard} col-span-2 sm:col-span-1`}>
                                 <div className={statIcon}>
                                     <User size={17} />
                                 </div>
@@ -749,7 +749,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                                         </span>
                                     )}
                                     {announced && (
-                                        <button onClick={handleReserveClick} className="bg-white/10 hover:bg-white/[0.16] border border-white/25 text-ink-on-navy flex items-center gap-2 font-bold py-4 px-8 rounded-2xl transition transform hover:-translate-y-0.5 cursor-pointer">
+                                        <button onClick={handleReserveClick} className="w-full sm:w-auto justify-center bg-white/10 hover:bg-white/[0.16] border border-white/25 text-ink-on-navy flex items-center gap-2 font-bold py-4 px-5 sm:px-8 rounded-2xl transition transform hover:-translate-y-0.5 cursor-pointer">
                                             {t('courseDetail.reserve_seat')}
                                         </button>
                                     )}
@@ -768,7 +768,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                     </div>
 
                     {/* Right: cover card, doubling as the trailer player */}
-                    <div className="block mt-2 lg:mt-0 animate-fade-in-up">
+                    <div className="block mt-2 lg:mt-0 animate-fade-in-up w-full max-w-md mx-auto lg:max-w-none">
                         <div className="relative">
                             <div className="absolute -inset-3 bg-gradient-to-tr from-brand-gold/30 to-transparent rounded-[2rem] blur-2xl opacity-50" aria-hidden />
                             <div className="relative rounded-[1.75rem] overflow-hidden border border-line shadow-2xl shadow-black/40 hover:scale-[1.02] transition-transform duration-500">
