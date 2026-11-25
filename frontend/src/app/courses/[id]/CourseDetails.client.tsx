@@ -593,7 +593,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
             </header>
 
             {/* Hero Section */}
-            <div className="relative overflow-hidden bg-gradient-to-br from-brand-navy-dark via-brand-navy to-brand-navy-light min-h-[480px]">
+            <div className="relative overflow-hidden bg-gradient-to-br from-brand-navy-dark via-brand-navy to-[#10284c] min-h-[480px]">
                 {course.coverImageUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={`${API_BASE_URL}${course.coverImageUrl}`} alt="" className="absolute inset-0 w-full h-full object-cover opacity-15" aria-hidden />
@@ -601,7 +601,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                 <div className="absolute inset-0 bg-gradient-to-br from-brand-navy-dark/70 via-brand-navy/85 to-brand-navy-dark/95" aria-hidden />
                 <div className="absolute -top-24 -start-24 w-96 h-96 bg-brand-gold/10 rounded-full blur-3xl" aria-hidden />
                 <div className="absolute top-1/2 end-0 w-72 h-72 bg-brand-gold/8 rounded-full blur-3xl" aria-hidden />
-                <div className="absolute bottom-0 start-1/3 w-80 h-80 bg-surface-raised rounded-full blur-3xl" aria-hidden />
+                <div className="absolute bottom-0 start-1/3 w-80 h-80 bg-brand-navy-dark/20 rounded-full blur-3xl" aria-hidden />
                 <div className="absolute bottom-0 end-0 w-80 h-80 bg-brand-gold/5 rounded-full blur-3xl" aria-hidden />
 
                 <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className="relative max-w-6xl mx-auto px-4 sm:px-6 md:px-10 pt-8 sm:pt-16 md:pt-20 pb-10 sm:pb-24 md:pb-28 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-8 sm:gap-10 md:gap-12 items-center">
