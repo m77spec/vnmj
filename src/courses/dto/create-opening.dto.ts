@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, Min, Max, IsInt, IsDateString, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsNumber, Min, Max, IsInt, IsDateString, IsEnum, IsIn } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DeliveryMode } from '@prisma/client';
@@ -42,6 +42,11 @@ export class CreateOpeningDto {
     @IsNumber()
     @Min(0)
     price!: number;
+
+    @ApiPropertyOptional({ description: 'Currency code for this opening', enum: ['YER', 'SAR', 'USD', 'AED', 'EUR', 'GBP', 'EGP', 'KWD', 'BHD', 'OMR', 'QAR'], example: 'YER', default: 'SAR' })
+    @IsOptional()
+    @IsIn(['YER', 'SAR', 'USD', 'AED', 'EUR', 'GBP', 'EGP', 'KWD', 'BHD', 'OMR', 'QAR'], { message: 'currency must be a supported currency code' })
+    currency?: string;
 
     @ApiPropertyOptional({ description: 'Original price before discount', example: 299.99 })
     @Type(() => Number)

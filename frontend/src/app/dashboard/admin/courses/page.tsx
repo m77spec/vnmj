@@ -20,6 +20,7 @@ interface Opening {
     endDate?: string | null;
     enrollmentDeadline?: string | null;
     price: string;
+    currency?: string;
     priceOld?: string | null;
     maxStudents?: number | null;
     isPublished: boolean;

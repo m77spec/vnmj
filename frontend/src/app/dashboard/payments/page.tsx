@@ -3,6 +3,7 @@
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useFetchData } from '@/lib/useFetchData';
 import { useI18n } from '@/lib/i18n-context';
+import { formatPrice } from '@/lib/format';
 import { api, getErrorMessage, downloadProtectedFile } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useState } from 'react';
@@ -16,6 +17,7 @@ interface Opening {
     id: string;
     status?: string | null;
     price: string;
+    currency?: string;
     nameAr?: string | null;
     nameEn?: string | null;
 }
@@ -43,6 +45,7 @@ interface Enrollment {
         nameAr?: string | null;
         nameEn?: string | null;
         price: string;
+        currency?: string;
     } | null;
 }
 
@@ -52,7 +55,7 @@ interface PayableEnrollment {
 }
 
 export default function PaymentsPage() {
-    const { t, pick } = useI18n();
+    const { t, pick, locale } = useI18n();
     const { data: enrollments, loading, error, refetch } = useFetchData<Enrollment[]>('/enrollments/my');
     const { data: courses } = useFetchData<Course[]>('/courses');
     const { data: gateways, loading: gatewaysLoading } = useFetchData<PaymentGateway[]>('/payment-gateways');
@@ -210,7 +213,7 @@ export default function PaymentsPage() {
                                          <div className="min-w-0">
                                              <h4 className="font-bold text-white line-clamp-2">{pick(course, 'title')}</h4>
                                             <p className="text-sm text-gray-400 mt-1">
-                                                {pick(opening, 'name')} · <strong className="text-green-400">${opening.price}</strong>
+                                                {pick(opening, 'name')} · <strong className="text-green-400">{formatPrice(opening.price, { currency: opening.currency, locale })}</strong>
                                             </p>
                                         </div>
                                         <button
@@ -248,7 +251,7 @@ export default function PaymentsPage() {
                                             </h4>
                                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-gray-400">
                                                 {pick(enrollment.opening, 'name') && <span>{pick(enrollment.opening, 'name')}</span>}
-                                                {enrollment.opening?.price != null && <span className="text-green-400 font-bold">${enrollment.opening.price}</span>}
+                                                {enrollment.opening?.price != null && <span className="text-green-400 font-bold">{formatPrice(enrollment.opening.price, { currency: enrollment.opening.currency, locale })}</span>}
                                                 <span>{t('myCourses.enrolled_on')} {new Date(enrollment.createdAt).toLocaleDateString()}</span>
                                             </div>
                                         </div>

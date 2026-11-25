@@ -13,6 +13,7 @@ import type { PublicInstructorCard } from '@/lib/public-instructor';
 interface PublicOpening {
     id: string;
     price: string;
+    currency?: string;
     priceOld?: string | null;
     status?: string | null;
 }
@@ -393,7 +394,7 @@ export default function InstructorProfileContent({ id }: { id: string }) {
                                             <div className="absolute top-4 right-4 bg-brand-navy/90 backdrop-blur-sm px-4 py-1 rounded-full font-black text-brand-gold shadow-sm">
                                                 {Number(currentOpening(course)!.price) === 0
                                                     ? t('course.free')
-                                                    : formatPrice(currentOpening(course)!.price, { locale })}
+                                                    : formatPrice(currentOpening(course)!.price, { currency: currentOpening(course)!.currency, locale })}
                                             </div>
                                         )}
                                     </div>

@@ -26,6 +26,7 @@ export interface PublicOpening {
     id: string;
     status?: string | null;
     price: string;
+    currency?: string;
     /** Struck through on the card when the opening is discounted. */
     priceOld?: string | null;
 }
@@ -120,10 +121,10 @@ export default function CourseCard({
         ? undefined
         : contentType === 'LIVE';
     const price = current
-        ? (Number(current.price) === 0 ? t('course.free') : formatPrice(current.price, { locale }))
+        ? (Number(current.price) === 0 ? t('course.free') : formatPrice(current.price, { currency: current.currency, locale }))
         : t('courseDetail.not_open_yet');
     const discounted = !!current && !!current.priceOld && Number(current.priceOld) > Number(current.price);
-    const oldPrice = discounted ? formatPrice(current!.priceOld!, { locale }) : null;
+    const oldPrice = discounted ? formatPrice(current!.priceOld!, { currency: current!.currency, locale }) : null;
 
     const reviewCount = course.reviewCount ?? 0;
     const averageRating = course.averageRating ?? 0;

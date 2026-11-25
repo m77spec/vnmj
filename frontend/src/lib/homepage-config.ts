@@ -37,7 +37,7 @@ export const DEFAULT_HOMEPAGE_CONFIG: HomepageConfig = {
     sections: [
         { id: 'hero', visible: true },
         { id: 'features', visible: true },
-        { id: 'stats', visible: true },
+        { id: 'stats', visible: false },
         { id: 'courses', visible: true },
         { id: 'about', visible: true },
         { id: 'contact', visible: true },
@@ -79,10 +79,16 @@ export function mergeHomepageConfig(value: unknown): HomepageConfig {
     const incoming = value as Partial<HomepageConfig>;
     const defaultSections = DEFAULT_HOMEPAGE_CONFIG.sections;
     const incomingSections = Array.isArray(incoming.sections) ? incoming.sections : [];
-    const sections = defaultSections.map((defaultItem) => ({
-        ...defaultItem,
-        ...(incomingSections.find((item) => item?.id === defaultItem.id) ?? {}),
-    }));
+    const sections = defaultSections.map((defaultItem) => {
+        const incomingItem = incomingSections.find((item) => item?.id === defaultItem.id);
+        return {
+            ...defaultItem,
+            ...(incomingItem ?? {}),
+            // Homepage numbers are intentionally hidden. Keep this section out of
+            // public merge results even if an older saved draft marked it visible.
+            visible: defaultItem.id === 'stats' ? false : (incomingItem?.visible ?? defaultItem.visible),
+        };
+    });
     sections.sort((left, right) => {
         const leftIndex = incomingSections.findIndex((item) => item?.id === left.id);
         const rightIndex = incomingSections.findIndex((item) => item?.id === right.id);
@@ -111,6 +117,14 @@ export function mergeHomepageConfig(value: unknown): HomepageConfig {
             : defaultItem;
     });
     return { sections, content, stats, socials };
+}
+
+export function hasHomepageFeaturedOpening(openings: unknown): boolean {
+    return Array.isArray(openings) && openings.some((opening) => {
+        if (!opening || typeof opening !== 'object') return false;
+        const status = (opening as { status?: unknown }).status;
+        return status === 'OPEN' || status === 'ANNOUNCEMENT';
+    });
 }
 
 export function localizedHomepageText(config: HomepageConfig, key: string, locale: string) {

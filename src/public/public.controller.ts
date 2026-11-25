@@ -97,7 +97,7 @@ export class PublicController {
                         createdAt: true,
                         openings: {
                             where: { status: { in: ['OPEN', 'ANNOUNCEMENT'] } },
-                            select: { id: true, price: true, priceOld: true, status: true },
+                            select: { id: true, price: true, priceOld: true, currency: true, status: true },
                         },
                         _count: { select: { enrollments: true } },
                     },
@@ -176,6 +176,7 @@ export class PublicController {
                         status: true,
                         price: true,
                         priceOld: true,
+                        currency: true,
                         nameAr: true,
                         nameEn: true,
                         startDate: true,

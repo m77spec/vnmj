@@ -23,6 +23,7 @@ interface FormValues {
     endDate: string;
     enrollmentDeadline: string;
     price: string;
+    currency: string;
     priceOld: string;
     maxStudents: string;
     refundWindowDays: string;
@@ -44,7 +45,7 @@ export default function OpeningForm({ courseId, openingId }: { courseId: string;
     const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm<FormValues>({
         defaultValues: {
             nameAr: '', nameEn: '', instructorId: '', startDate: '', endDate: '',
-            enrollmentDeadline: '', price: '', priceOld: '', maxStudents: '',
+            enrollmentDeadline: '', price: '', currency: 'YER', priceOld: '', maxStudents: '',
             // New batches are online by default: it is what the academy sells,
             // and the link field appears with the mode so nothing else changes.
             refundWindowDays: '', deliveryMode: 'ONLINE', meetLink: '',
@@ -74,6 +75,7 @@ export default function OpeningForm({ courseId, openingId }: { courseId: string;
                         endDate: dateVal(o.endDate as string),
                         enrollmentDeadline: dateVal(o.enrollmentDeadline as string),
                         price: o.price ? Number(o.price).toString() : '',
+                        currency: (o.currency as string) || 'SAR',
                         priceOld: o.priceOld ? Number(o.priceOld).toString() : '',
                         maxStudents: o.maxStudents ? Number(o.maxStudents).toString() : '',
                         refundWindowDays: o.refundWindowDays != null ? String(o.refundWindowDays) : '',
@@ -102,6 +104,7 @@ export default function OpeningForm({ courseId, openingId }: { courseId: string;
                 endDate: data.endDate || null,
                 enrollmentDeadline: data.enrollmentDeadline || null,
                 price: Number(data.price),
+                currency: data.currency,
                 priceOld: num(data.priceOld),
                 maxStudents: num(data.maxStudents),
                 refundWindowDays: data.refundWindowDays !== '' ? Number(data.refundWindowDays) : null,
@@ -169,7 +172,23 @@ export default function OpeningForm({ courseId, openingId }: { courseId: string;
                     <section className="border-t border-white/10 pt-8 mt-8">
                         <h3 className="text-xl font-black text-white mb-1">{t('opening.section_fees')}</h3>
                         <p className="text-sm text-gray-400 mb-4">{t('opening.fees_hint')}</p>
-                        <div className="grid md:grid-cols-3 gap-3">
+                        <div className="grid md:grid-cols-4 gap-3">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-300 mb-1">{t('opening.currency')} *</label>
+                                <select {...register('currency', { required: true })} className={inputCls}>
+                                    <option value="YER">YER — الريال اليمني</option>
+                                    <option value="SAR">SAR — الريال السعودي</option>
+                                    <option value="USD">USD — الدولار الأمريكي</option>
+                                    <option value="AED">AED — الدرهم الإماراتي</option>
+                                    <option value="EGP">EGP — الجنيه المصري</option>
+                                    <option value="EUR">EUR — اليورو</option>
+                                    <option value="GBP">GBP — الجنيه الإسترليني</option>
+                                    <option value="KWD">KWD — الدينار الكويتي</option>
+                                    <option value="BHD">BHD — الدينار البحريني</option>
+                                    <option value="OMR">OMR — الريال العماني</option>
+                                    <option value="QAR">QAR — الريال القطري</option>
+                                </select>
+                            </div>
                             <div>
                                 <label className="block text-sm font-bold text-gray-300 mb-1">{t('opening.price')} *</label>
                                 <input type="number" step="0.01" min={0} {...register('price', { required: t('opening.price_required') })} className={inputCls} placeholder={t('opening.price_placeholder')} />

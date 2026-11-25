@@ -32,6 +32,7 @@ const editPayload = {
     endDate: '2026-10-17',
     enrollmentDeadline: null,
     price: 19.99,
+    currency: 'YER',
     priceOld: 49.99,
     maxStudents: '30',
     refundWindowDays: '3',
@@ -62,6 +63,15 @@ describe('PATCH /openings/:id input', () => {
         assert.equal(out.endDate, new Date('2026-10-17').toISOString());
         // A cleared optional date stays null instead of becoming Invalid Date.
         assert.equal(out.enrollmentDeadline, null);
+    });
+
+    test('accepts supported currencies and rejects unknown codes', async () => {
+        const out = await run(editPayload);
+        assert.equal(out.currency, 'YER');
+        await assert.rejects(
+            () => run({ ...editPayload, currency: 'XYZ' }),
+            BadRequestException,
+        );
     });
 
     test('the normalised date is something Prisma accepts', async () => {

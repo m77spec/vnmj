@@ -20,6 +20,7 @@ interface Opening {
     id: string;
     status?: string | null;
     price: string;
+    currency?: string;
 }
 
 interface BrowseLearningPath {
@@ -472,7 +473,7 @@ export default function ExploreCourses({ hideHeader = false, dark }: { hideHeade
                             <BookOpen size={24} />
                         </div>
                         <h2 className={`text-2xl font-black mb-2 ${isDark ? 'text-white' : 'text-brand-navy'}`}>{t('explore.enroll_in')} {pick(selectedCourse, 'title')}</h2>
-                        <p className={`mb-4 ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>{t('explore.transfer_part1')} <strong className={isDark ? 'text-brand-gold-light' : 'text-brand-navy'}>{formatPrice(currentOpening(selectedCourse)?.price, { locale })}</strong> {t('explore.transfer_part2')}</p>
+                        <p className={`mb-4 ${isDark ? 'text-gray-300' : 'text-gray-500'}`}>{t('explore.transfer_part1')} <strong className={isDark ? 'text-brand-gold-light' : 'text-brand-navy'}>{formatPrice(currentOpening(selectedCourse)?.price, { currency: currentOpening(selectedCourse)?.currency, locale })}</strong> {t('explore.transfer_part2')}</p>
 
                         <div className="mb-6">
                             <label className={`block text-sm font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-gray-300' : 'text-brand-charcoal'}`}>
@@ -503,11 +504,11 @@ export default function ExploreCourses({ hideHeader = false, dark }: { hideHeade
                                     </div>
                                     <div className={`flex items-center justify-between mt-1 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                                         <span>{t('payments.coupon_discount')}</span>
-                                        <span className="font-bold text-emerald-500">-{formatPrice(coupon.amountOff, { locale })}</span>
+                                        <span className="font-bold text-emerald-500">-{formatPrice(coupon.amountOff, { currency: currentOpening(selectedCourse)?.currency, locale })}</span>
                                     </div>
                                     <div className={`flex items-center justify-between mt-1 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                                         <span>{t('payments.coupon_total')}</span>
-                                        <span className={`font-black ${isDark ? 'text-white' : 'text-brand-navy'}`}>{formatPrice(coupon.finalAmount, { locale })}</span>
+                                        <span className={`font-black ${isDark ? 'text-white' : 'text-brand-navy'}`}>{formatPrice(coupon.finalAmount, { currency: currentOpening(selectedCourse)?.currency, locale })}</span>
                                     </div>
                                 </div>
                             )}

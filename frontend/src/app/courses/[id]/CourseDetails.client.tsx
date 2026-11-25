@@ -129,10 +129,10 @@ const SectionTitle = ({ icon, children }: { icon: React.ReactNode; children: Rea
     return (
         <div className="flex flex-col gap-2 mb-5">
             <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl bg-brand-gold/10 flex items-center justify-center shrink-0 'text-gold-ink'`}>
+                <div className="w-10 h-10 rounded-xl bg-brand-gold/10 text-gold-ink flex items-center justify-center shrink-0">
                     {icon}
                 </div>
-                <h2 className={`text-xl md:text-2xl font-black 'text-ink'`}>{children}</h2>
+                <h2 className="text-xl md:text-2xl font-black text-ink">{children}</h2>
             </div>
             <div className="w-12 h-1 bg-brand-gold/30 rounded-full ms-[52px]" />
         </div>
@@ -150,7 +150,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
     // tiles cannot use the page's own ink tokens: --ink is #1b2434 in the light
     // theme, which lands at roughly 1.2:1 on #0a1c35. White tints and the
     // theme-independent on-navy inks instead.
-    const statCard = 'bg-white/[0.06] border border-white/15 rounded-2xl px-4 py-3 flex items-center gap-3 backdrop-blur-md hover:border-brand-gold/40 transition';
+    const statCard = 'min-w-0 flex-1 basis-[150px] sm:basis-auto bg-white/[0.08] border border-white/15 rounded-2xl px-3 sm:px-4 py-3 flex items-center gap-2.5 sm:gap-3 backdrop-blur-md hover:border-brand-gold/40 transition';
     const statIcon = 'w-9 h-9 rounded-xl bg-brand-gold/20 flex items-center justify-center text-brand-gold-light';
     const statValue = 'text-sm font-black text-ink-on-navy';
     // Caption above each value. The Latin treatment is small, bold, capped and
@@ -246,7 +246,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
         const item = (key: typeof activeTab, icon: React.ReactNode, label: string) => (
             <button
                 onClick={() => setActiveTab(key)}
-                className={`relative inline-flex shrink-0 items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
+                className={`relative flex min-w-[118px] flex-1 sm:flex-none shrink-0 items-center justify-center gap-2 px-3 sm:px-4 py-3 sm:py-2.5 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
                     tab === key
                         ? 'bg-brand-gold/15 text-gold-ink border border-brand-gold/25'
                         : dark ? 'text-gold-ink hover:text-ink hover:bg-ink/[0.04] border border-transparent' : 'text-gold-ink hover:text-ink hover:bg-surface-sunken border border-transparent'
@@ -265,7 +265,8 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                 {/* One scrollable row instead of wrapping: with six tabs a phone
                     wrapped them onto three lines, which turned the sticky strip
                     into a wall that ate a third of the viewport. */}
-                <div className={`inline-flex max-w-full gap-1 overflow-x-auto rounded-2xl border p-1.5 shadow-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${dark ? 'bg-surface-sunken backdrop-blur-md border-line shadow-black/20' : 'bg-surface-raised backdrop-blur-md border-line shadow-brand-navy/10'}`}>
+                <div className={`flex w-full sm:w-auto max-w-full gap-1 overflow-x-auto rounded-2xl border p-1.5 shadow-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${dark ? 'bg-surface-sunken backdrop-blur-md border-line shadow-black/20' : 'bg-surface-raised backdrop-blur-md border-line shadow-brand-navy/10'}`}>
+
                     {item('overview', <BookOpen size={18} />, t('courseDetail.tab_overview'))}
                     {mode === 'student' && item('tasks', <ClipboardList size={18} />, t('courseDetail.tab_tasks'))}
                     {mode === 'student' && item('grades', <GraduationCap size={18} />, t('courseDetail.tab_grades'))}
@@ -603,7 +604,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                 <div className="absolute bottom-0 start-1/3 w-80 h-80 bg-surface-raised rounded-full blur-3xl" aria-hidden />
                 <div className="absolute bottom-0 end-0 w-80 h-80 bg-brand-gold/5 rounded-full blur-3xl" aria-hidden />
 
-                <div className="relative max-w-6xl mx-auto px-4 sm:px-6 md:px-10 pt-10 sm:pt-16 md:pt-20 pb-14 sm:pb-24 md:pb-28 grid lg:grid-cols-[1.2fr_1fr] gap-10 md:gap-12 items-center">
+                <div className="relative max-w-6xl mx-auto px-4 sm:px-6 md:px-10 pt-8 sm:pt-16 md:pt-20 pb-10 sm:pb-24 md:pb-28 grid lg:grid-cols-[1.2fr_1fr] gap-8 sm:gap-10 md:gap-12 items-center">
                     {/* Left */}
                     <div className="animate-fade-in-up">
                         {/* The hero panel is a fixed navy gradient: it is the same
@@ -646,7 +647,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                             is navy in the light theme too, so the title needs the
                             same lift it has in the dark one. */}
                         <h1
-                            className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-ink-on-navy mb-4 sm:mb-5 leading-[1.15] sm:leading-[1.08] tracking-tight break-words"
+                            className="text-[1.75rem] leading-[1.18] sm:text-4xl md:text-5xl lg:text-6xl font-black text-ink-on-navy mb-4 sm:mb-5 sm:leading-[1.08] tracking-tight break-words"
                             style={{ textShadow: '0 2px 24px rgba(0,0,0,0.5)' }}
                         >
                             {pick(course, 'title')}
@@ -669,7 +670,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                         )}
 
                         {/* Stats */}
-                        <div className="flex flex-wrap gap-3 mb-8">
+                        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2.5 sm:gap-3 mb-6 sm:mb-8">
                             <div className={statCard}>
                                 <div className={statIcon}>
                                     <Clock size={17} />
@@ -715,7 +716,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                         </div>
 
                         {/* Enrollment status replaces the CTA once the student has a record. */}
-                        <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex w-full flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
                             {access?.enrollmentStatus ? (
                                 <div
                                     role="status"
@@ -738,13 +739,13 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                                 </div>
                             ) : opening ? (
                                 <>
-                                    <button onClick={() => handleEnrollClick(opening)} className="bg-gradient-to-r from-brand-gold to-brand-gold-dark hover:from-brand-gold-light hover:to-brand-gold text-black flex items-center gap-3 font-black py-4 px-8 rounded-2xl shadow-xl shadow-brand-gold/25 hover:shadow-[0_0_30px_rgba(245,158,11,0.45)] transition-all transform hover:-translate-y-0.5 cursor-pointer animate-[pulse_2.5s_ease-in-out_infinite] hover:animate-none">
+                                    <button onClick={() => handleEnrollClick(opening)} className="w-full sm:w-auto justify-center bg-gradient-to-r from-brand-gold to-brand-gold-dark hover:from-brand-gold-light hover:to-brand-gold text-ink-on-gold flex items-center gap-3 font-black py-4 px-5 sm:px-8 rounded-2xl shadow-xl shadow-brand-gold/25 transition-all duration-300 hover:-translate-y-0.5 cursor-pointer">
                                         <BookOpen size={20} />
-                                        {Number(opening.price) === 0 ? t('course.free') : `${t('courseDetail.enroll_for')} ${formatPrice(opening.price, { locale })}`}
+                                        {Number(opening.price) === 0 ? t('course.free') : `${t('courseDetail.enroll_for')} ${formatPrice(opening.price, { currency: opening.currency, locale })}`}
                                     </button>
                                     {opening.priceOld && Number(opening.priceOld) > Number(opening.price) && (
                                         <span className="text-ink-on-navy-muted text-sm font-semibold">
-                                            {t('courseDetail.was_price')} <s className="text-ink-on-navy-muted">{formatPrice(opening.priceOld, { locale })}</s>
+                                            {t('courseDetail.was_price')} <s className="text-ink-on-navy-muted">{formatPrice(opening.priceOld, { currency: opening.currency, locale })}</s>
                                         </span>
                                     )}
                                     {announced && (
@@ -754,7 +755,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                                     )}
                                 </>
                             ) : announced ? (
-                                <button onClick={handleReserveClick} className="bg-gradient-to-r from-brand-gold to-brand-gold-dark hover:from-brand-gold-light hover:to-brand-gold text-black flex items-center gap-3 font-black py-4 px-8 rounded-2xl shadow-xl shadow-brand-gold/25 hover:shadow-[0_0_30px_rgba(245,158,11,0.45)] transition-all transform hover:-translate-y-0.5 cursor-pointer animate-[pulse_2.5s_ease-in-out_infinite] hover:animate-none">
+                                <button onClick={handleReserveClick} className="w-full sm:w-auto justify-center bg-gradient-to-r from-brand-gold to-brand-gold-dark hover:from-brand-gold-light hover:to-brand-gold text-ink-on-gold flex items-center gap-3 font-black py-4 px-5 sm:px-8 rounded-2xl shadow-xl shadow-brand-gold/25 transition-all duration-300 hover:-translate-y-0.5 cursor-pointer">
                                     <BookOpen size={20} />
                                     {t('courseDetail.reserve_seat')}
                                 </button>
@@ -767,7 +768,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                     </div>
 
                     {/* Right: cover card, doubling as the trailer player */}
-                    <div className="hidden lg:block animate-fade-in-up">
+                    <div className="block mt-2 lg:mt-0 animate-fade-in-up">
                         <div className="relative">
                             <div className="absolute -inset-3 bg-gradient-to-tr from-brand-gold/30 to-transparent rounded-[2rem] blur-2xl opacity-50" aria-hidden />
                             <div className="relative rounded-[1.75rem] overflow-hidden border border-line shadow-2xl shadow-black/40 hover:scale-[1.02] transition-transform duration-500">
@@ -811,11 +812,11 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                                         )}
                                     </>
                                 )}
-                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-brand-navy-dark/95 to-transparent p-6 pt-16 pointer-events-none">
+                                <div className="hidden sm:block absolute inset-x-0 bottom-0 bg-gradient-to-t from-brand-navy-dark/95 to-transparent p-6 pt-16 pointer-events-none">
                                     <div className="flex items-center justify-between gap-4">
                                         <div>
                                             <div className="text-[10px] font-bold text-brand-gold-light uppercase tracking-[0.2em] mb-1">
-                                                {opening ? (Number(opening.price) === 0 ? t('course.free') : formatPrice(opening.price, { locale })) : t('courseDetail.not_open_yet')}
+                                                {opening ? (Number(opening.price) === 0 ? t('course.free') : formatPrice(opening.price, { currency: opening.currency, locale })) : t('courseDetail.not_open_yet')}
                                             </div>
                                             <div className="text-ink-on-navy font-black text-2xl">{pick(course, 'title')}</div>
                                         </div>
@@ -833,9 +834,9 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                 </div>
             </div>
 
-            <div className="max-w-6xl mx-auto px-4 md:px-6 -mt-10 relative z-20">
+            <div className="max-w-6xl mx-auto px-3 sm:px-4 md:px-6 -mt-4 sm:-mt-10 relative z-20">
                 {mode !== 'guest' && renderTabs()}
-                <div className={`rounded-3xl shadow-2xl p-4 sm:p-6 md:p-12 animate-fade-in-up ${dark ? 'bg-surface shadow-black/20 border border-line' : 'bg-surface-raised shadow-brand-navy/10 border border-line'}`}>
+                <div className={`rounded-2xl sm:rounded-3xl shadow-2xl p-3 sm:p-6 md:p-12 animate-fade-in-up ${dark ? 'bg-surface shadow-black/20 border border-line' : 'bg-surface-raised shadow-brand-navy/10 border border-line'}`}>
 
                     {mode !== 'guest' && tab !== 'overview' ? (
                         <>
@@ -887,7 +888,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                                     )}
                                     {pick(course, 'syllabus') && (
                                         <div>
-                                            <h3 className={`text-lg font-bold mb-2 'text-ink'`}>{t('courseDetail.syllabus_heading')}</h3>
+                                            <h3 className={`text-lg font-bold mb-2 text-ink`}>{t('courseDetail.syllabus_heading')}</h3>
                                             <p className={`whitespace-pre-wrap leading-relaxed rounded-2xl p-5 ${'text-ink-muted bg-surface-sunken border border-line'}`}>
                                                 {pick(course, 'syllabus') || t('courseDetail.syllabus_fallback')}
                                             </p>
@@ -903,7 +904,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                                     <ul className="space-y-3">
                                         {course.prerequisites.map((p, idx) => (
                                             <li key={idx} className="flex items-start gap-3">
-                                                <ListChecks size={18} className={`mt-0.5 flex-shrink-0 'text-accent'`} />
+                                                <ListChecks size={18} className={`mt-0.5 flex-shrink-0 text-accent`} />
                                                 <span className={`font-medium ${dark ? 'text-ink-muted' : 'text-ink-subtle'}`}>{pick(p, 'prerequisite')}</span>
                                             </li>
                                         ))}
@@ -918,7 +919,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                                     <ul className="space-y-3">
                                         {course.audiences.map((a, idx) => (
                                             <li key={idx} className="flex items-start gap-3">
-                                                <CheckCircle size={18} className={`mt-0.5 flex-shrink-0 'text-accent'`} />
+                                                <CheckCircle size={18} className={`mt-0.5 flex-shrink-0 text-accent`} />
                                                 <span className={`font-medium ${dark ? 'text-ink-muted' : 'text-ink-subtle'}`}>{pick(a, 'audience')}</span>
                                             </li>
                                         ))}
@@ -949,15 +950,15 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                                             {/* Wraps instead of truncating: a clipped
                                                 name is unreadable on a phone, and
                                                 Arabic job titles are long. */}
-                                            <div className={`font-black break-words 'text-ink'`} dir="auto">
+                                            <div className={`font-black break-words text-ink`} dir="auto">
                                                 {instructorName || t('courseDetail.expert_instructor')}
                                             </div>
-                                            <div className={`mt-0.5 text-sm break-words 'text-ink-subtle'`} dir="auto">
+                                            <div className={`mt-0.5 text-sm break-words text-ink-subtle`} dir="auto">
                                                 {instructorJobTitle || t('courseDetail.instructor_role')}
                                             </div>
                                             <Link
                                                 href={`/instructors/${courseInstructor.id}`}
-                                                className={`mt-2 inline-flex items-center gap-1.5 text-sm font-bold hover:underline 'text-accent'`}
+                                                className={`mt-2 inline-flex items-center gap-1.5 text-sm font-bold hover:underline text-accent`}
                                             >
                                                 {t('courseDetail.instructor_view_profile')}
                                             </Link>
@@ -978,7 +979,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                                                     className={`w-full flex items-center justify-between gap-3 p-4 text-left font-bold transition ${dark ? 'text-ink hover:bg-ink/[0.04]' : 'text-ink hover:bg-surface-sunken'}`}
                                                 >
                                                     <span>{pick(f, 'question')}</span>
-                                                    <ChevronDown size={18} className={`flex-shrink-0 transition-transform ${openFaq === idx ? 'rotate-180' : ''} 'text-accent'`} />
+                                                    <ChevronDown size={18} className={`flex-shrink-0 transition-transform ${openFaq === idx ? 'rotate-180' : ''} text-accent`} />
                                                 </button>
                                                 {openFaq === idx && (
                                                     <p className={`px-4 pb-4 text-sm leading-relaxed ${dark ? 'text-ink-muted' : 'text-ink-subtle'}`}>{pick(f, 'answer')}</p>
@@ -1042,7 +1043,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                                                 <BookOpen size={16} />
                                             </div>
                                             <span className="font-black text-accent text-3xl">
-                                                {Number(metaOpening.price) === 0 ? t('course.free') : formatPrice(metaOpening.price, { locale })}
+                                                {Number(metaOpening.price) === 0 ? t('course.free') : formatPrice(metaOpening.price, { currency: metaOpening.currency, locale })}
                                             </span>
                                         </div>
                                     )}
@@ -1113,11 +1114,11 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
             {selectedOpening && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4">
                     <div className={`rounded-3xl w-full max-w-lg p-5 sm:p-8 shadow-2xl transform transition-all max-h-[90vh] overflow-y-auto ${dark ? 'bg-surface border border-line' : 'bg-surface-raised border border-line'}`}>
-                        <h2 className={`text-xl sm:text-2xl font-black mb-2 break-words 'text-ink'`}>
+                        <h2 className={`text-xl sm:text-2xl font-black mb-2 break-words text-ink`}>
                             {t('explore.enroll_in')} {pick(course, 'title')}
                         </h2>
                         <p className={`mb-4 ${dark ? 'text-ink-muted' : 'text-ink-subtle'}`}>
-                            {t('explore.transfer_part1')} <strong className={'text-accent'}>{formatPrice(selectedOpening.price, { locale })}</strong> {t('explore.transfer_part2')}
+                            {t('explore.transfer_part1')} <strong className="text-accent">{formatPrice(selectedOpening.price, { currency: selectedOpening.currency, locale })}</strong> {t('explore.transfer_part2')}
                         </p>
 
                         <div className="mb-6">
@@ -1149,11 +1150,11 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                                     </div>
                                     <div className={`flex items-center justify-between mt-1 ${dark ? 'text-ink-muted' : 'text-ink-subtle'}`}>
                                         <span>{t('payments.coupon_discount')}</span>
-                                        <span className="font-bold text-emerald-500">-{formatPrice(coupon.amountOff, { locale })}</span>
+                                        <span className="font-bold text-emerald-500">-{formatPrice(coupon.amountOff, { currency: selectedOpening.currency, locale })}</span>
                                     </div>
                                     <div className={`flex items-center justify-between mt-1 ${dark ? 'text-ink-muted' : 'text-ink-subtle'}`}>
                                         <span>{t('payments.coupon_total')}</span>
-                                        <span className="font-black text-ink">{formatPrice(coupon.finalAmount, { locale })}</span>
+                                        <span className="font-black text-ink">{formatPrice(coupon.finalAmount, { currency: selectedOpening.currency, locale })}</span>
                                     </div>
                                 </div>
                             )}
@@ -1163,7 +1164,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
 
                         <div className="mb-6 space-y-3">
                             <h3 className={`font-bold text-sm uppercase tracking-wider ${dark ? 'text-ink-muted' : 'text-ink'}`}>{t('payment.payment_method')}:</h3>
-                            <p className={`text-xs -mt-1 'text-ink-subtle'`}>{t('payment.choose_method_hint')}</p>
+                            <p className={`text-xs -mt-1 text-ink-subtle`}>{t('payment.choose_method_hint')}</p>
                             <PaymentMethods
                                 gateways={gateways}
                                 loading={gatewaysLoading}

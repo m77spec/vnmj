@@ -11,7 +11,7 @@ import AnnouncementBanner from '@/components/AnnouncementBanner';
 import MarketingShell from '@/components/MarketingShell';
 import CourseCard, { type PublicCourse } from '@/components/CourseCard';
 import { api } from '@/lib/api';
-import { DEFAULT_HOMEPAGE_CONFIG, localizedHomepageText, mergeHomepageConfig, type HomepageConfig, type HomepageSectionId } from '@/lib/homepage-config';
+import { DEFAULT_HOMEPAGE_CONFIG, hasHomepageFeaturedOpening, localizedHomepageText, mergeHomepageConfig, type HomepageConfig, type HomepageSectionId } from '@/lib/homepage-config';
 
 interface HomeLearningPath {
   id: string;
@@ -70,7 +70,7 @@ export default function Home() {
     const pool = activePathId
       ? (homeCourses ?? []).filter(course => activePathCourseIds.has(course.id))
       : (homeCourses ?? []);
-    return pool.filter((course) => course.openings?.some((opening) => opening.status === 'OPEN')).slice(0, 3);
+    return pool.filter((course) => hasHomepageFeaturedOpening(course.openings)).slice(0, 3);
   }, [homeCourses, activePathId, activePathCourseIds]);
 
   const aboutValues = [

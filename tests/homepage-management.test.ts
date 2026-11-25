@@ -2,7 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BadRequestException } from '@nestjs/common';
 import { HomepageService } from '../src/homepage/homepage.service';
-import { DEFAULT_HOMEPAGE_CONFIG, mergeHomepageConfig } from '../frontend/src/lib/homepage-config';
+import { DEFAULT_HOMEPAGE_CONFIG, hasHomepageFeaturedOpening, mergeHomepageConfig } from '../frontend/src/lib/homepage-config';
 
 const config = {
     sections: ['hero', 'features', 'stats', 'courses', 'about', 'contact', 'cta']
@@ -102,6 +102,23 @@ describe('homepage management', () => {
 
         assert.deepEqual(reordered.sections.map((section) => section.id), ['cta', 'contact', 'about', 'courses', 'stats', 'features', 'hero']);
         assert.equal(reordered.sections.find((section) => section.id === 'stats')?.visible, false);
+    });
+
+    test('homepage course cards include open and announced openings', () => {
+        assert.equal(hasHomepageFeaturedOpening([{ status: 'OPEN' }]), true);
+        assert.equal(hasHomepageFeaturedOpening([{ status: 'ANNOUNCEMENT' }]), true);
+        assert.equal(hasHomepageFeaturedOpening([{ status: 'DRAFT' }, { status: 'ENDED' }]), false);
+    });
+
+    test('homepage statistics stay hidden for public and older visible configurations', () => {
+        const visibleStats = structuredClone(DEFAULT_HOMEPAGE_CONFIG);
+        visibleStats.sections = visibleStats.sections.map((section) =>
+            section.id === 'stats' ? { ...section, visible: true } : section,
+        );
+
+        const merged = mergeHomepageConfig(visibleStats);
+
+        assert.equal(merged.sections.find((section) => section.id === 'stats')?.visible, false);
     });
 
     test('merging adds new social links to older saved configurations', () => {
