@@ -413,10 +413,10 @@ function Card({
     children: React.ReactNode;
 }) {
     return (
-        <section className="bg-white dark:bg-brand-navy-dark border border-gray-200 dark:border-white/5 rounded-2xl p-5 sm:p-6 shadow-sm">
+        <section className="bg-white dark:bg-brand-navy-dark border border-gray-200/80 dark:border-white/10 rounded-2xl p-5 sm:p-6 shadow-[0_8px_30px_rgba(15,42,67,0.05)] hover:shadow-[0_14px_36px_rgba(15,42,67,0.08)] transition-shadow">
             <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
                 <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-brand-gold/10 text-brand-gold-dark dark:text-brand-gold-light flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-gold/20 to-brand-gold/5 ring-1 ring-brand-gold/10 text-brand-gold-dark dark:text-brand-gold-light flex items-center justify-center shrink-0">
                         <Icon size={18} />
                     </div>
                     <div>

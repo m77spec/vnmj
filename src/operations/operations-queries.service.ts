@@ -274,16 +274,67 @@ export class OperationsQueriesService {
         });
         if (!session) return null;
 
-        const [actions, apiCalls, pageViews, securityEvents] = await Promise.all([
+        const [actions, apiCalls, pageViews, securityEvents, summaryEvents] = await Promise.all([
             this.prisma.visitEvent.count({ where: { sessionId: id, type: 'action' } }),
             this.prisma.visitEvent.count({ where: { sessionId: id, type: 'api_call' } }),
             this.prisma.visitEvent.count({ where: { sessionId: id, type: 'page_view' } }),
             this.prisma.visitEvent.count({ where: { sessionId: id, type: 'security' } }),
+            typeof this.prisma.visitEvent.findMany === 'function'
+                ? this.prisma.visitEvent.findMany({
+                    where: { sessionId: id },
+                    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+                    take: 5000,
+                    select: { id: true, type: true, path: true, label: true, createdAt: true, statusCode: true, durationMs: true },
+                })
+                : Promise.resolve([]),
         ]);
+
+        const topPages = new Map<string, number>();
+        const topActions = new Map<string, number>();
+        const hourly = new Map<string, number>();
+        const routeSequence: string[] = [];
+        let previousPage: string | null = null;
+
+        for (const event of summaryEvents) {
+            const hour = new Date(event.createdAt).toISOString().slice(0, 13) + ':00:00.000Z';
+            hourly.set(hour, (hourly.get(hour) ?? 0) + 1);
+
+            if (event.type === 'page_view') {
+                const page = event.path || event.label || '/';
+                topPages.set(page, (topPages.get(page) ?? 0) + 1);
+                if (previousPage !== page) routeSequence.push(page);
+                previousPage = page;
+            } else if (event.type === 'action') {
+                const action = event.label || event.path || 'unknown-action';
+                topActions.set(action, (topActions.get(action) ?? 0) + 1);
+            }
+        }
+
+        const rank = (map: Map<string, number>) => [...map.entries()]
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .slice(0, 8)
+            .map(([name, count]) => ({ name, count }));
+
+        const firstEvent = summaryEvents[0]?.createdAt;
+        const lastEvent = summaryEvents.at(-1)?.createdAt;
+        const durationMs = firstEvent && lastEvent
+            ? Math.max(0, new Date(lastEvent).getTime() - new Date(firstEvent).getTime())
+            : 0;
 
         return {
             session,
             counts: { actions, apiCalls, pageViews, security: securityEvents, total: actions + apiCalls + pageViews + securityEvents },
+            summary: {
+                durationMs,
+                durationMinutes: Math.round(durationMs / 60000),
+                topPages: rank(topPages),
+                uniquePages: topPages.size,
+                topActions: rank(topActions),
+                hourlyActivity: [...hourly.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([hour, count]) => ({ hour, count })),
+                routeSequence: routeSequence.slice(-30),
+                summarizedEvents: summaryEvents.length,
+                truncated: summaryEvents.length < actions + apiCalls + pageViews + securityEvents,
+            },
         };
     }
 
