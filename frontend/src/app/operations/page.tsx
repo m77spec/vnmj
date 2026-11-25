@@ -64,9 +64,12 @@ interface TrackedEvent {
     statusCode: number | null;
     durationMs: number | null;
     label: string | null;
+    meta?: Record<string, string | number> | null;
     createdAt: string;
     session: TrackedSession;
 }
+
+type SessionTimelineEvent = Omit<TrackedEvent, 'session'>;
 
 interface AdminActivity {
     id: string;
@@ -109,7 +112,7 @@ interface TimelinePoint {
 interface SessionDetail {
     session: TrackedSession & {
         user?: { id: string; email: string; role: string; createdAt: string } | null;
-        events?: TrackedEvent[];
+        events?: SessionTimelineEvent[];
     };
     counts: { actions: number; apiCalls: number; pageViews: number; security: number; total: number };
 }
@@ -194,6 +197,7 @@ function OperationsCenterPage() {
     const [deviceTypeFilter, setDeviceTypeFilter] = useState('');
     const [selected, setSelected] = useState<SessionDetail | null>(null);
     const [loadingDetail, setLoadingDetail] = useState(false);
+    const [loadingMoreEvents, setLoadingMoreEvents] = useState(false);
     const [autoRefresh, setAutoRefresh] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -349,6 +353,7 @@ function OperationsCenterPage() {
 
     const openDevice = useCallback(async (id: string) => {
         setLoadingDetail(true);
+        setSelected(null);
         try {
             const res = await api.get(`/api/admin/operations/sessions/${id}`, { headers });
             setSelected(res.data);
@@ -358,6 +363,40 @@ function OperationsCenterPage() {
             setLoadingDetail(false);
         }
     }, [headers, handleApiError]);
+
+    const loadMoreDeviceEvents = useCallback(async () => {
+        if (!selected || loadingMoreEvents) return;
+        const sessionId = selected.session.id;
+        const currentEvents = selected.session.events ?? [];
+        setLoadingMoreEvents(true);
+        try {
+            const params = new URLSearchParams({
+                sessionId,
+                take: '50',
+            });
+            if (currentEvents.length > 0) {
+                params.set('cursor', currentEvents[currentEvents.length - 1].id);
+            }
+            const res = await api.get(`/api/admin/operations/events?${params}`, { headers });
+            setSelected(current => {
+                if (!current || current.session.id !== sessionId) return current;
+                const existing = new Set((current.session.events ?? []).map(event => event.id));
+                const olderEvents = res.data.items.filter((event: TrackedEvent) => !existing.has(event.id));
+                return {
+                    ...current,
+                    session: {
+                        ...current.session,
+                        events: [...(current.session.events ?? []), ...olderEvents],
+                    },
+                };
+            });
+            setError(null);
+        } catch (err) {
+            handleApiError(err);
+        } finally {
+            setLoadingMoreEvents(false);
+        }
+    }, [selected, loadingMoreEvents, headers, handleApiError]);
 
     // Pull only what the visible tab needs. Polling every tab at once would
     // triple the write-free read load for data nobody is looking at.
@@ -413,37 +452,45 @@ function OperationsCenterPage() {
     const viewsDelta = totals ? delta(totals.pageViews, totals.pageViewsPrevious) : null;
 
     return (
-        <div className="min-h-screen bg-brand-white dark:bg-brand-navy-dark text-brand-charcoal dark:text-white">
+        <div className="min-h-screen bg-gradient-to-b from-slate-100/80 via-brand-white to-brand-white dark:from-[#071629] dark:via-brand-navy-dark dark:to-[#071629] text-brand-charcoal dark:text-white">
             {/* Masthead. Deliberately not the admin shell: the page must not be
                 reachable from any navigation, so it carries no links out. */}
-            <header className="bg-gradient-to-r from-brand-navy-dark via-brand-navy to-[#0e2a52] border-b border-white/10">
-                <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 flex flex-wrap items-center justify-between gap-4">
+            <header className="bg-gradient-to-br from-brand-navy-dark via-brand-navy to-[#173c6d] border-b border-white/10 shadow-xl shadow-brand-navy-dark/15">
+                <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-wrap items-center justify-between gap-5">
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur flex items-center justify-center shrink-0">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-gold/25 to-white/5 ring-1 ring-white/15 shadow-inner flex items-center justify-center shrink-0">
                             <ShieldCheck size={24} className="text-brand-gold-light" />
                         </div>
                         <div>
                             <h1 className="text-xl sm:text-2xl font-black text-ink-on-navy tracking-tight">{t('ops.title')}</h1>
-                            <p className="text-xs text-ink-on-navy-subtle mt-0.5">{t('ops.subtitle')}</p>
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                                <p className="text-xs text-ink-on-navy-subtle">{t('ops.subtitle')}</p>
+                                {totals && (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold text-emerald-200">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                        {totals.activeNow} {t('ops.status_online')}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex w-full sm:w-auto flex-wrap items-center gap-2.5">
                         {/* Drives the same `hours` window the stats, chart and
                             breakdowns use, so one control re-scopes the page. */}
-                        <div className="flex items-center rounded-xl border border-white/15 bg-white/5 p-0.5">
+                        <div className="flex items-center rounded-xl border border-white/15 bg-black/10 p-1 shadow-inner">
                             {RANGE_OPTIONS.map(opt => (
                                 <button
                                     key={opt.hours}
                                     onClick={() => setHours(opt.hours)}
-                                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                                        hours === opt.hours ? 'bg-brand-gold text-navy' : 'text-ink-on-navy-muted hover:text-ink-on-navy'
+                                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                                        hours === opt.hours ? 'bg-brand-gold text-brand-navy-dark shadow-sm' : 'text-ink-on-navy-muted hover:text-ink-on-navy'
                                     }`}
                                 >
                                     {t(opt.labelKey)}
                                 </button>
                             ))}
                         </div>
-                        <label className="flex items-center gap-2 text-xs font-bold text-ink-on-navy-muted cursor-pointer select-none">
+                        <label className="flex items-center gap-2 text-xs font-bold text-ink-on-navy-muted cursor-pointer select-none rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition">
                             <input
                                 type="checkbox"
                                 checked={autoRefresh}
@@ -455,7 +502,7 @@ function OperationsCenterPage() {
                         <button
                             onClick={lock}
                             data-ops-action="operations.lock"
-                            className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/15 text-ink-on-navy px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer"
+                            className="inline-flex items-center gap-2 bg-white/5 hover:bg-red-400/10 border border-white/15 hover:border-red-200/20 text-ink-on-navy px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer"
                         >
                             <Lock size={15} />
                             {t('ops.lock')}
@@ -464,7 +511,7 @@ function OperationsCenterPage() {
                 </div>
 
                 {/* Tabs */}
-                <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 flex gap-2 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {([
                         ['overview', LayoutGrid, 'ops.tab_overview'],
                         ['live', Activity, 'ops.tab_live'],
@@ -476,10 +523,10 @@ function OperationsCenterPage() {
                             key={id}
                             onClick={() => setTab(id)}
                             data-ops-action={`operations.tab.${id}`}
-                            className={`flex items-center gap-2 px-4 py-3 text-sm font-bold transition cursor-pointer border-b-2 whitespace-nowrap ${
+                            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold transition cursor-pointer rounded-xl whitespace-nowrap ${
                                 tab === id
-                                    ? 'border-brand-gold text-brand-gold-light'
-                                    : 'border-transparent text-ink-on-navy-muted hover:text-ink-on-navy'
+                                    ? 'bg-white/12 text-white shadow-sm ring-1 ring-white/10'
+                                    : 'text-ink-on-navy-muted hover:text-ink-on-navy hover:bg-white/5'
                             }`}
                         >
                             <Icon size={17} />
@@ -499,7 +546,7 @@ function OperationsCenterPage() {
 
                 {tab === 'overview' && (
                     <>
-                        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
                             <Stat
                                 icon={Monitor}
                                 label={t('ops.stat_devices')}
@@ -531,21 +578,32 @@ function OperationsCenterPage() {
                                 {timeline.map((point) => {
                                     const total = point.pageViews + point.apiCalls + point.actions;
                                     return (
-                                        <div key={point.hour} className="flex-1 min-w-[6px] group relative">
+                                        <div key={point.hour} className="flex-1 min-w-[6px] h-full flex items-end group relative">
                                             <div
-                                                className="w-full rounded-t bg-gradient-to-t from-brand-navy to-brand-navy-light/60 hover:from-brand-gold hover:to-brand-gold-light transition-colors"
-                                                style={{ height: `${Math.max(3, (total / maxTimeline) * 100)}%` }}
-                                            />
-                                            <span className="absolute -top-8 start-1/2 -translate-x-1/2 hidden group-hover:block text-[10px] font-bold bg-brand-navy-dark text-white px-2 py-1 rounded whitespace-nowrap">
-                                                {total}
-                                            </span>
+                                                className="w-full max-w-5 mx-auto flex flex-col-reverse overflow-hidden rounded-t-md hover:brightness-110 transition"
+                                                style={{ height: `${Math.max(total > 0 ? 5 : 0, (total / maxTimeline) * 100)}%` }}
+                                                title={`${new Date(point.hour).toLocaleString()} · ${total}`}
+                                            >
+                                                {total > 0 && (
+                                                    <>
+                                                        <span className="bg-brand-navy-light" style={{ height: `${(point.pageViews / total) * 100}%` }} />
+                                                        <span className="bg-sky-400" style={{ height: `${(point.apiCalls / total) * 100}%` }} />
+                                                        <span className="bg-brand-gold" style={{ height: `${(point.actions / total) * 100}%` }} />
+                                                    </>
+                                                )}
+                                            </div>
+                                            {total > 0 && (
+                                                <span className="absolute -top-8 start-1/2 -translate-x-1/2 hidden group-hover:block text-[10px] font-bold bg-brand-navy-dark text-white px-2 py-1 rounded-lg whitespace-nowrap shadow-lg">
+                                                    {total}
+                                                </span>
+                                            )}
                                         </div>
                                     );
                                 })}
                             </div>
                             <div className="flex gap-4 mt-4 text-[11px] font-bold text-gray-500 dark:text-gray-400">
-                                <Legend color="bg-brand-navy" label={t('ops.legend_pages')} />
-                                <Legend color="bg-brand-navy-light/60" label={t('ops.legend_calls')} />
+                                <Legend color="bg-brand-navy-light" label={t('ops.legend_pages')} />
+                                <Legend color="bg-sky-400" label={t('ops.legend_calls')} />
                                 <Legend color="bg-brand-gold" label={t('ops.legend_actions')} />
                             </div>
                         </Panel>
@@ -815,7 +873,13 @@ function OperationsCenterPage() {
             </main>
 
             {selected && (
-                <DeviceDrawer detail={selected} onClose={() => setSelected(null)} t={t} />
+                <DeviceDrawer
+                    detail={selected}
+                    loadingMore={loadingMoreEvents}
+                    onLoadMore={loadMoreDeviceEvents}
+                    onClose={() => setSelected(null)}
+                    t={t}
+                />
             )}
         </div>
     );
@@ -1008,16 +1072,17 @@ function Stat({
         amber: 'bg-orange-500/15 text-orange-400',
     };
     return (
-        <div className="bg-white dark:bg-brand-navy-dark border border-gray-200 dark:border-white/5 rounded-2xl p-4 shadow-sm">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${tiles[tone]}`}>
+        <div className="group relative overflow-hidden bg-white dark:bg-brand-navy-dark border border-gray-200/80 dark:border-white/10 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
+            <div className={`absolute inset-x-0 top-0 h-1 opacity-70 ${tone === 'gold' ? 'bg-brand-gold' : tone === 'green' ? 'bg-emerald-500' : tone === 'purple' ? 'bg-purple-500' : tone === 'amber' ? 'bg-orange-500' : 'bg-brand-navy-light'}`} />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${tiles[tone]}`}>
                 <Icon size={18} />
             </div>
-            <div className="text-2xl font-black text-brand-navy dark:text-white tabular-nums">{value ?? '—'}</div>
-            <div className="flex items-center gap-1.5 mt-1">
+            <div className="text-2xl sm:text-3xl font-black text-brand-navy dark:text-white tabular-nums tracking-tight">{value === undefined ? '—' : value.toLocaleString()}</div>
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                 <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400">{label}</span>
                 {change !== null && change !== undefined && (
-                    <span className={`text-[10px] font-black ${change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                        {change >= 0 ? '▲' : '▼'} {Math.abs(change)}%
+                    <span className={`text-[10px] font-black rounded-full px-1.5 py-0.5 ${change >= 0 ? 'text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-500/10' : 'text-red-700 bg-red-50 dark:text-red-300 dark:bg-red-500/10'}`}>
+                        {change >= 0 ? '↑' : '↓'} {Math.abs(change)}%
                     </span>
                 )}
             </div>
@@ -1035,10 +1100,10 @@ function Panel({
     children: React.ReactNode;
 }) {
     return (
-        <section className="bg-white dark:bg-brand-navy-dark border border-gray-200 dark:border-white/5 rounded-2xl p-5 sm:p-6 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <section className="bg-white dark:bg-brand-navy-dark border border-gray-200/80 dark:border-white/10 rounded-2xl p-4 sm:p-6 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
                 <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-brand-gold/10 text-brand-gold-dark dark:text-brand-gold-light flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-gold/20 to-brand-gold/5 text-brand-gold-dark dark:text-brand-gold-light ring-1 ring-brand-gold/10 flex items-center justify-center shrink-0">
                         <Icon size={18} />
                     </div>
                     <div>
@@ -1106,8 +1171,8 @@ function EventTable({
     }
     return (
         <div className="overflow-x-auto -mx-5 sm:-mx-6">
-            <table className="w-full text-start text-sm min-w-[900px]">
-                <thead>
+            <table className="w-full text-start text-sm min-w-[900px] border-separate border-spacing-0">
+                <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-[#102542]">
                     <tr className="border-b border-gray-200 dark:border-white/5">
                         <Th>{t('ops.col_time')}</Th>
                         <Th>{t('ops.col_type')}</Th>
@@ -1192,8 +1257,8 @@ function DeviceTable({
     }
     return (
         <div className="overflow-x-auto -mx-5 sm:-mx-6">
-            <table className="w-full text-start text-sm min-w-[900px]">
-                <thead>
+            <table className="w-full text-start text-sm min-w-[900px] border-separate border-spacing-0">
+                <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-[#102542]">
                     <tr className="border-b border-gray-200 dark:border-white/5">
                         <Th>{t('ops.col_device')}</Th>
                         <Th>{t('ops.col_os')}</Th>
@@ -1208,10 +1273,12 @@ function DeviceTable({
                     {devices.map((device) => {
                         const DeviceIcon = DEVICE_ICONS[device.deviceType] ?? Cpu;
                         return (
-                            <tr key={device.id} className="hover:bg-gray-50 dark:hover:bg-white/5 transition">
+                            <tr key={device.id} className="group hover:bg-brand-navy/[0.025] dark:hover:bg-white/[0.04] transition-colors">
                                 <td className="px-4 py-3">
                                     <span className="inline-flex items-center gap-2 text-xs font-bold text-brand-navy dark:text-white">
-                                        <DeviceIcon size={15} className="text-brand-gold-dark dark:text-brand-gold" />
+                                        <span className="w-8 h-8 rounded-xl bg-brand-gold/10 flex items-center justify-center">
+                                            <DeviceIcon size={15} className="text-brand-gold-dark dark:text-brand-gold" />
+                                        </span>
                                         {t(`ops.device_${device.deviceType}`)}
                                         <span className="text-gray-500 dark:text-gray-400 font-normal">
                                             {device.browser ?? '—'}
@@ -1239,7 +1306,7 @@ function DeviceTable({
                                     <button
                                         onClick={() => onOpen(device.id)}
                                         disabled={loadingDetail}
-                                        className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-gold-dark dark:text-brand-gold hover:underline disabled:opacity-50 cursor-pointer"
+                                        className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-navy dark:text-white bg-gray-100 dark:bg-white/5 group-hover:bg-brand-gold group-hover:text-brand-navy-dark px-3 py-2 rounded-lg transition disabled:opacity-50 cursor-pointer"
                                     >
                                         {t('ops.view_device')}
                                         <ArrowRight size={13} className="rtl:rotate-180" />
@@ -1255,14 +1322,17 @@ function DeviceTable({
 }
 
 function DeviceDrawer({
-    detail, onClose, t,
+    detail, loadingMore, onLoadMore, onClose, t,
 }: {
     detail: SessionDetail;
+    loadingMore: boolean;
+    onLoadMore: () => void;
     onClose: () => void;
     t: (k: string) => string;
 }) {
     const { session, counts } = detail;
     const events = session.events ?? [];
+    const DeviceIcon = DEVICE_ICONS[session.deviceType] ?? Cpu;
     const rows: Array<[string, string]> = [
         [t('ops.field_visitor_id'), session.visitorId],
         [t('ops.field_ip'), session.ipAddress ?? t('ops.na')],
@@ -1281,22 +1351,39 @@ function DeviceDrawer({
     return (
         <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-            <aside className="relative w-full max-w-2xl bg-white dark:bg-brand-navy-dark border-s border-gray-200 dark:border-white/10 shadow-2xl flex flex-col animate-fade-in">
-                <div className="flex items-start justify-between gap-4 p-5 border-b border-gray-200 dark:border-white/10">
-                    <div>
-                        <h2 className="text-lg font-black text-brand-navy dark:text-white">{t('ops.drawer_title')}</h2>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono" dir="ltr">{session.visitorId}</p>
+            <aside className="relative w-full max-w-3xl bg-slate-50 dark:bg-[#0b1c32] border-s border-gray-200 dark:border-white/10 shadow-2xl flex flex-col animate-fade-in">
+                <div className="relative overflow-hidden bg-gradient-to-br from-brand-navy-dark via-brand-navy to-[#204779] px-5 sm:px-7 py-6 sm:py-7">
+                    <div className="absolute -top-20 -end-10 w-56 h-56 rounded-full bg-brand-gold/10 blur-3xl pointer-events-none" />
+                    <div className="relative flex items-start justify-between gap-4">
+                        <div className="flex items-center gap-4 min-w-0">
+                            <div className="w-14 h-14 rounded-2xl bg-white/10 ring-1 ring-white/15 flex items-center justify-center shrink-0">
+                                <DeviceIcon size={26} className="text-brand-gold-light" />
+                            </div>
+                            <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <h2 className="text-lg sm:text-xl font-black text-white">{t('ops.drawer_title')}</h2>
+                                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${session.isAuthenticated ? 'bg-emerald-400/10 text-emerald-200 ring-emerald-200/20' : 'bg-white/10 text-white/75 ring-white/10'}`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${session.isAuthenticated ? 'bg-emerald-400' : 'bg-white/40'}`} />
+                                        {session.isAuthenticated ? t('ops.stat_signed_in') : t('ops.guest')}
+                                    </span>
+                                </div>
+                                <p className="text-xs text-white/65 mt-1.5 font-mono truncate" dir="ltr">{session.visitorId}</p>
+                                <p className="text-xs text-white/80 mt-1">
+                                    {[t(`ops.device_${session.deviceType}`), session.browser, session.os].filter(Boolean).join(' · ')}
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={onClose}
+                            aria-label={t('common.close')}
+                            className="w-10 h-10 rounded-xl bg-white/10 text-white/80 hover:bg-white/20 hover:text-white ring-1 ring-white/10 flex items-center justify-center transition cursor-pointer shrink-0"
+                        >
+                            <X size={18} />
+                        </button>
                     </div>
-                    <button
-                        onClick={onClose}
-                        aria-label={t('common.close')}
-                        className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-center transition cursor-pointer shrink-0"
-                    >
-                        <X size={18} />
-                    </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-5 space-y-6">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         {([
                             [t('ops.count_pages'), counts.pageViews, Eye],
@@ -1304,47 +1391,54 @@ function DeviceDrawer({
                             [t('ops.count_actions'), counts.actions, MousePointerClick],
                             [t('ops.count_security'), counts.security, ShieldCheck],
                         ] as const).map(([label, value, Icon]) => (
-                            <div key={label} className="bg-gray-50 dark:bg-white/5 rounded-xl p-3 text-center">
-                                <Icon size={15} className="mx-auto mb-1.5 text-brand-gold-dark dark:text-brand-gold" />
-                                <div className="text-lg font-black text-brand-navy dark:text-white tabular-nums">{value}</div>
-                                <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400">{label}</div>
+                            <div key={label} className="bg-white dark:bg-brand-navy-dark border border-gray-200/80 dark:border-white/10 rounded-2xl p-3.5 text-center shadow-sm">
+                                <div className="w-8 h-8 rounded-xl bg-brand-gold/10 mx-auto mb-2 flex items-center justify-center">
+                                    <Icon size={15} className="text-brand-gold-dark dark:text-brand-gold" />
+                                </div>
+                                <div className="text-xl font-black text-brand-navy dark:text-white tabular-nums">{value.toLocaleString()}</div>
+                                <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 mt-0.5">{label}</div>
                             </div>
                         ))}
                     </div>
 
-                    <div>
-                        <h3 className="text-xs font-black text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">{t('ops.drawer_fingerprint')}</h3>
-                        <dl className="space-y-2">
+                    <section className="bg-white dark:bg-brand-navy-dark border border-gray-200/80 dark:border-white/10 rounded-2xl p-4 sm:p-5 shadow-sm">
+                        <h3 className="text-xs font-black text-brand-navy dark:text-white mb-4 flex items-center gap-2">
+                            <span className="w-1.5 h-5 rounded-full bg-brand-gold" />
+                            {t('ops.drawer_fingerprint')}
+                        </h3>
+                        <dl className="grid sm:grid-cols-2 gap-x-6">
                             {rows.map(([label, value]) => (
-                                <div key={label} className="flex items-start justify-between gap-4 text-xs py-1.5 border-b border-gray-100 dark:border-white/5">
-                                    <dt className="text-gray-500 dark:text-gray-400 font-bold shrink-0">{label}</dt>
-                                    <dd className="text-brand-navy dark:text-white font-mono truncate text-end" dir="ltr" title={value}>{value}</dd>
+                                <div key={label} className="flex flex-col gap-1 py-2.5 border-b border-gray-100 dark:border-white/5 min-w-0">
+                                    <dt className="text-[10px] text-gray-500 dark:text-gray-400 font-bold">{label}</dt>
+                                    <dd className="text-xs text-brand-navy dark:text-white font-semibold truncate" dir="auto" title={value}>{value}</dd>
                                 </div>
                             ))}
                         </dl>
                         {session.userAgent && (
-                            <div className="mt-3">
-                                <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 mb-1">{t('ops.field_user_agent')}</p>
-                                <p className="text-[10px] font-mono text-gray-500 dark:text-gray-400 break-all bg-gray-50 dark:bg-white/5 rounded-lg p-2.5" dir="ltr">
+                            <div className="mt-4">
+                                <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 mb-2">{t('ops.field_user_agent')}</p>
+                                <p className="text-[10px] font-mono text-gray-600 dark:text-gray-300 break-all bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 rounded-xl p-3" dir="ltr">
                                     {session.userAgent}
                                 </p>
                             </div>
                         )}
-                    </div>
+                    </section>
 
-                    <div>
-                        <h3 className="text-xs font-black text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
-                            {t('ops.drawer_timeline')} · {events.length}
+                    <section className="bg-white dark:bg-brand-navy-dark border border-gray-200/80 dark:border-white/10 rounded-2xl p-4 sm:p-5 shadow-sm">
+                        <h3 className="text-xs font-black text-brand-navy dark:text-white mb-4 flex items-center gap-2">
+                            <span className="w-1.5 h-5 rounded-full bg-brand-gold" />
+                            {t('ops.drawer_timeline')}
+                            <span className="ms-auto text-[10px] text-gray-500 dark:text-gray-400 font-bold tabular-nums">{events.length} / {counts.total}</span>
                         </h3>
-                        <ol className="space-y-2.5 max-h-[26rem] overflow-y-auto pe-1">
+                        <ol className="relative space-y-3 max-h-[32rem] overflow-y-auto pe-1 before:absolute before:top-3 before:bottom-3 before:start-[15px] before:w-px before:bg-gray-200 dark:before:bg-white/10">
                             {events.map((event) => {
                                 const Icon = EVENT_ICONS[event.type] ?? Activity;
                                 return (
-                                    <li key={event.id} className="flex items-start gap-3">
-                                        <span className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-white/5 flex items-center justify-center shrink-0 mt-0.5">
-                                            <Icon size={13} className="text-brand-gold-dark dark:text-brand-gold" />
+                                    <li key={event.id} className="relative flex items-start gap-3">
+                                        <span className="relative z-10 w-8 h-8 rounded-xl bg-brand-navy text-white ring-4 ring-white dark:ring-brand-navy-dark flex items-center justify-center shrink-0">
+                                            <Icon size={13} className="text-brand-gold-light" />
                                         </span>
-                                        <div className="flex-1 min-w-0">
+                                        <div className="flex-1 min-w-0 rounded-xl bg-gray-50/80 dark:bg-white/[0.03] border border-gray-100 dark:border-white/5 p-3">
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <span className="text-xs font-black text-brand-navy dark:text-white">
                                                     {t(`ops.type_${event.type}`)}
@@ -1357,21 +1451,56 @@ function DeviceDrawer({
                                             <p className="text-[11px] font-mono text-gray-500 dark:text-gray-400 truncate" dir="ltr">
                                                 {event.type === 'api_call'
                                                     ? `${event.method} ${event.path ?? ''}`
-                                                    : (event.label ?? event.path ?? '—')}
+                                                    : event.type === 'page_view'
+                                                        ? (event.path ?? event.label ?? '—')
+                                                        : (event.label ?? '—')}
                                             </p>
+                                            {event.type === 'page_view' && event.label && event.label !== event.path && (
+                                                <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">{event.label}</p>
+                                            )}
+                                            {event.type === 'action' && event.path && (
+                                                <p className="text-[10px] font-mono text-gray-500 dark:text-gray-400 truncate" dir="ltr">
+                                                    {event.path}
+                                                </p>
+                                            )}
+                                            {event.meta && Object.keys(event.meta).length > 0 && (
+                                                <dl className="flex flex-wrap gap-1.5 mt-1.5">
+                                                    {Object.entries(event.meta).map(([key, value]) => (
+                                                        <div
+                                                            key={key}
+                                                            className="inline-flex items-center gap-1 rounded-md bg-brand-gold/10 px-2 py-1 text-[10px]"
+                                                        >
+                                                            <dt className="font-bold text-gray-600 dark:text-gray-300">{t(`ops.meta_${key}`)}:</dt>
+                                                            <dd className="font-mono text-brand-navy dark:text-white break-all" dir="auto">{String(value)}</dd>
+                                                        </div>
+                                                    ))}
+                                                </dl>
+                                            )}
                                             <p className="text-[10px] text-gray-400 font-mono">{new Date(event.createdAt).toLocaleString()}</p>
                                         </div>
                                     </li>
                                 );
                             })}
                         </ol>
-                    </div>
+                        {events.length < counts.total && (
+                            <button
+                                type="button"
+                                onClick={onLoadMore}
+                                disabled={loadingMore}
+                                className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 dark:border-white/10 px-4 py-2.5 text-xs font-bold text-brand-navy dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-60 transition"
+                            >
+                                {loadingMore && <Loader2 size={14} className="animate-spin" />}
+                                {loadingMore ? t('ops.loading_more_events') : t('ops.load_more_events')}
+                                {!loadingMore && <span className="text-gray-500">({counts.total - events.length})</span>}
+                            </button>
+                        )}
+                    </section>
                 </div>
 
-                <div className="p-4 border-t border-gray-200 dark:border-white/10">
+                <div className="p-4 sm:px-6 border-t border-gray-200 dark:border-white/10 bg-white/80 dark:bg-brand-navy-dark/90">
                     <button
                         onClick={onClose}
-                        className="w-full py-3 rounded-xl bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-gray-200 font-bold hover:bg-gray-200 dark:hover:bg-white/10 transition cursor-pointer"
+                        className="w-full py-3 rounded-xl bg-brand-navy text-white font-bold shadow-lg shadow-brand-navy/15 hover:bg-brand-navy-light transition cursor-pointer"
                     >
                         {t('common.close')}
                     </button>

@@ -117,6 +117,9 @@ export class EventsQueryDto {
     @IsOptional() @IsString() @MaxLength(64)
     sessionId?: string;
 
+    @IsOptional() @IsString() @MaxLength(64)
+    cursor?: string;
+
     @IsOptional() @IsString() @MaxLength(120)
     search?: string;
 

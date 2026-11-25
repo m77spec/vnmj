@@ -204,6 +204,7 @@ export class AdminOperationsController {
         const result = await this.queries.events({
             type: q.type,
             sessionId: q.sessionId,
+            cursor: q.cursor,
             search: q.search,
             from: q.from ? new Date(q.from) : undefined,
             to: q.to ? new Date(q.to) : undefined,

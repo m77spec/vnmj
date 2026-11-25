@@ -6,6 +6,7 @@ import { OperationsKeyService, OperationsTrackerMiddleware } from '../src/operat
 import { OperationsController } from '../src/operations/operations.controller';
 import { AdminOperationsController } from '../src/operations/admin-operations.controller';
 import { OperationsSettingsService } from '../src/operations/operations-settings.service';
+import { OperationsQueriesService } from '../src/operations/operations-queries.service';
 import { EventsQueryDto, SessionsQueryDto } from '../src/operations/dto/operations.dto';
 import { plainToInstance } from 'class-transformer';
 import { UnauthorizedException, ForbiddenException, NotFoundException } from '@nestjs/common';
@@ -935,6 +936,60 @@ describe('PLATFORM: CORS permits the headers the frontend actually sends', () =>
             allowed.includes('x-ops-grant'),
             `x-ops-grant missing from allowedHeaders: ${allowed.join(', ')}`,
         );
+    });
+
+    describe('OPERATIONS: device event history', () => {
+        test('returns a stable, bounded first page and counts the complete history', async () => {
+            let query: any;
+            const prisma: any = {
+                visitSession: {
+                    findUnique: async (args: any) => {
+                        query = args;
+                        return { id: 'session-1', events: [{ id: 'event-1', meta: { resourceId: 'course-1' } }] };
+                    },
+                },
+                visitEvent: {
+                    count: async ({ where }: any) => ({
+                        action: 2,
+                        api_call: 3,
+                        page_view: 4,
+                        security: 1,
+                    }[where.type] ?? 0),
+                },
+            };
+
+            const result = await new OperationsQueriesService(prisma).sessionDetail('session-1');
+
+            assert.equal(query.include.events.take, 50);
+            assert.deepEqual(query.include.events.orderBy, [{ createdAt: 'desc' }, { id: 'desc' }]);
+            assert.deepEqual(result?.session.events, [{ id: 'event-1', meta: { resourceId: 'course-1' } }]);
+            assert.deepEqual(result?.counts, { actions: 2, apiCalls: 3, pageViews: 4, security: 1, total: 10 });
+        });
+
+        test('continues the history after the last event without relying on a shifting offset', async () => {
+            let query: any;
+            const prisma: any = {
+                visitEvent: {
+                    findMany: async (args: any) => {
+                        query = args;
+                        return [];
+                    },
+                    count: async () => 101,
+                },
+            };
+
+            const result = await new OperationsQueriesService(prisma).events({
+                sessionId: 'session-1',
+                cursor: 'event-50',
+                skip: 0,
+                take: 50,
+            });
+
+            assert.deepEqual(query.cursor, { id: 'event-50' });
+            assert.equal(query.skip, 1);
+            assert.equal(query.take, 50);
+            assert.equal(result.total, 101);
+        });
     });
 
     test('the headers every authenticated request needs are still allowed', () => {

@@ -116,6 +116,7 @@ export class OperationsQueriesService {
     async events(filters: {
         type?: string;
         sessionId?: string;
+        cursor?: string;
         search?: string;
         from?: Date;
         to?: Date;
@@ -147,8 +148,8 @@ export class OperationsQueriesService {
         const [items, total] = await Promise.all([
             this.prisma.visitEvent.findMany({
                 where,
-                orderBy: { createdAt: 'desc' },
-                skip: filters.skip,
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                ...(filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : { skip: filters.skip }),
                 take: filters.take,
                 include: {
                     session: {
@@ -260,17 +261,15 @@ export class OperationsQueriesService {
     }
 
     /**
-     * One device in full: its fingerprint plus every event it ever produced.
-     * This is the "what exactly did this device do" answer, so the event list is
-     * not capped -- an admin opening a device is explicitly asking for its
-     * history, and truncating it would defeat the page.
+     * One device's fingerprint, its newest events, and counts for the full
+     * history. Older events are fetched from the paginated event feed.
      */
     async sessionDetail(id: string) {
         const session = await this.prisma.visitSession.findUnique({
             where: { id },
             include: {
                 user: { select: { id: true, email: true, role: true, createdAt: true } },
-                events: { orderBy: { createdAt: 'desc' }, take: 500 },
+                events: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 50 },
             },
         });
         if (!session) return null;
