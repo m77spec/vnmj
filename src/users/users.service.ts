@@ -88,43 +88,38 @@ export class UsersService {
                 id: true, email: true, role: true, isActive: true, metadata: true,
                 createdAt: true, updatedAt: true, language: true, emailVerifiedAt: true,
                 twoFactorEnabled: true,
+                _count: {
+                    select: {
+                        enrollments: true,
+                        certificates: true,
+                        coursesTaught: true,
+                        openingsTaught: true,
+                        tickets: true,
+                        receivedMessages: { where: { readAt: null } },
+                        notifications: { where: { readAt: null } },
+                    },
+                },
             },
         });
         if (!user) throw new NotFoundException('User not found');
 
         const canSeePending = user.role === Role.FINANCE || user.role === Role.ADMIN;
-
-        const [
-            enrollments,
-            certificates,
-            coursesTaught,
-            openingsTaught,
-            pendingEnrollments,
-            tickets,
-            unreadMessages,
-            unreadNotifications,
-        ] = await Promise.all([
-            this.prisma.enrollment.count({ where: { studentId: user.id } }),
-            this.prisma.certificate.count({ where: { studentId: user.id } }),
-            this.prisma.course.count({ where: { instructorId: user.id } }),
-            this.prisma.courseOpening.count({ where: { instructorId: user.id } }),
-            canSeePending ? this.prisma.enrollment.count({ where: { status: EnrollmentStatus.PENDING } }) : Promise.resolve(0),
-            this.prisma.supportTicket.count({ where: { userId: user.id } }),
-            this.prisma.message.count({ where: { recipientId: user.id, readAt: null } }),
-            this.prisma.notification.count({ where: { userId: user.id, readAt: null } }),
-        ]);
+        const pendingEnrollments = canSeePending
+            ? await this.prisma.enrollment.count({ where: { status: EnrollmentStatus.PENDING } })
+            : 0;
+        const { _count, ...profile } = user;
 
         return {
-            ...user,
+            ...profile,
             stats: {
-                enrollments,
-                certificates,
-                coursesTaught,
-                openingsTaught,
+                enrollments: _count.enrollments,
+                certificates: _count.certificates,
+                coursesTaught: _count.coursesTaught,
+                openingsTaught: _count.openingsTaught,
                 pendingEnrollments,
-                tickets,
-                unreadMessages,
-                unreadNotifications,
+                tickets: _count.tickets,
+                unreadMessages: _count.receivedMessages,
+                unreadNotifications: _count.notifications,
             },
         };
     }

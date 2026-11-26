@@ -344,6 +344,7 @@ model Course {
   importRequests      CourseImportRequest[]
 
   @@index([archivedAt])
+  @@index([instructorId, createdAt])
 }
 
 model CourseImportRequest {
@@ -646,6 +647,7 @@ model Enrollment {
 
   // A student can only enroll in a specific course once (or have one active record)
   @@unique([studentId, courseId])
+  @@index([openingId, createdAt])
   @@index([reviewedById])
 }
 
@@ -953,6 +955,8 @@ model SupportTicket {
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model ContactSubmission {
@@ -1072,7 +1076,7 @@ model Message {
   opening   CourseOpening? @relation(fields: [openingId], references: [id], onDelete: SetNull)
 
   @@index([senderId])
-  @@index([recipientId])
+  @@index([recipientId, readAt])
   @@index([courseId])
   @@index([openingId])
 }

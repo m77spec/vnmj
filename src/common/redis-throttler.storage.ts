@@ -3,6 +3,25 @@ import type { ThrottlerStorage } from '@nestjs/throttler';
 import type { ThrottlerStorageRecord } from '@nestjs/throttler/dist/throttler-storage-record.interface';
 import Redis from 'ioredis';
 
+const INCREMENT_RATE_LIMIT_SCRIPT = `
+local totalHits = redis.call('INCR', KEYS[1])
+if totalHits == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+
+local timeToExpire = redis.call('TTL', KEYS[1])
+local timeToBlockExpire = redis.call('TTL', KEYS[2])
+local isBlocked = timeToBlockExpire > 0
+
+if not isBlocked and totalHits > tonumber(ARGV[2]) then
+    timeToBlockExpire = tonumber(ARGV[3])
+    redis.call('SET', KEYS[2], '1', 'EX', timeToBlockExpire)
+    isBlocked = true
+end
+
+return { totalHits, math.max(0, timeToExpire), isBlocked and 1 or 0, math.max(0, timeToBlockExpire) }
+`;
+
 /**
  * Rate-limit counters shared across every replica.
  *
@@ -17,11 +36,9 @@ import Redis from 'ioredis';
  * Redis makes the counters shared, so the limit means the same thing on every
  * instance and survives a restart or a rolling deploy.
  *
- * The increment is one round trip using INCR, plus EXPIRE only on the first hit
- * of a window. That mirrors the default "fixed window per key" behaviour: the
- * window is anchored to the first request in it rather than sliding, so a client
- * can burst twice the limit across a window boundary. That is the standard
- * trade-off, and it matches what the in-process version did.
+ * A Lua script increments, sets expiry and checks/sets the block in one Redis
+ * round trip. Keeping the fixed-window logic atomic avoids per-request ping and
+ * multiple sequential Redis operations on the API hot path.
  *
  * If REDIS_URL is unset or Redis is unreachable, this falls back to an in-process
  * Map so a cache outage degrades the rate limit to per-replica rather than
@@ -78,43 +95,24 @@ export class RedisThrottlerStorage implements ThrottlerStorage, OnModuleDestroy 
 
         const redisKey = `rl:${throttlerName}:${key}`;
         const ttlSeconds = Math.max(1, Math.ceil(ttl / 1000));
+        const blockSeconds = Math.max(1, Math.ceil(blockDuration / 1000));
 
         try {
-            if (!(await this.client.ping())) throw new Error('ping failed');
-
-            const totalHits = await this.client.incr(redisKey);
-            if (totalHits === 1) {
-                // Anchor the window to its first hit.
-                await this.client.expire(redisKey, ttlSeconds);
-            }
-            const remainingTtl = await this.client.ttl(redisKey);
-
-            // A separate key holds the block so that clearing it cannot race with
-            // the hit counter's own TTL.
-            const blockKey = `${redisKey}:blocked`;
-            const isBlocked = (await this.client.exists(blockKey)) === 1;
-
-            if (!isBlocked && totalHits > limit) {
-                const blockSeconds = Math.max(1, Math.ceil(blockDuration / 1000));
-                await this.client.set(blockKey, '1', 'EX', blockSeconds);
-                return {
-                    totalHits,
-                    timeToExpire: Math.max(0, remainingTtl),
-                    isBlocked: true,
-                    timeToBlockExpire: blockSeconds,
-                };
-            }
-
-            let timeToBlockExpire = 0;
-            if (isBlocked) {
-                timeToBlockExpire = Math.max(0, await this.client.ttl(blockKey));
-            }
+            const result = await this.client.eval(
+                INCREMENT_RATE_LIMIT_SCRIPT,
+                2,
+                redisKey,
+                `${redisKey}:blocked`,
+                ttlSeconds,
+                limit,
+                blockSeconds,
+            ) as [number, number, number, number];
 
             return {
-                totalHits,
-                timeToExpire: Math.max(0, remainingTtl),
-                isBlocked,
-                timeToBlockExpire,
+                totalHits: Number(result[0]),
+                timeToExpire: Math.max(0, Number(result[1])),
+                isBlocked: Number(result[2]) === 1,
+                timeToBlockExpire: Math.max(0, Number(result[3])),
             };
         } catch (err) {
             this.logger.warn(`Redis increment failed (${(err as Error).message}); using in-memory counters.`);

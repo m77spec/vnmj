@@ -600,6 +600,34 @@ describe('OPERATIONS: the session cache stays bounded', () => {
         for (let i = 0; i < 10; i++) await svc.resolveSession(request, { userId: null });
         assert.equal(reads, 1, 'expected exactly one lookup for ten requests');
     });
+
+    test('a session is promoted once without a per-request database update', async () => {
+        let reads = 0;
+        let updates = 0;
+        let storedUserId: string | null = null;
+        const prisma: any = {
+            visitSession: {
+                findUnique: async () => {
+                    reads++;
+                    return { id: 'existing', userId: storedUserId };
+                },
+                update: async ({ data }: any) => {
+                    updates++;
+                    storedUserId = data.userId ?? storedUserId;
+                },
+            },
+            visitEvent: { create: async () => ({}) },
+        };
+        const svc = new OperationsService(prisma);
+        const request = req({ cookie: 'laxalab_vid=33333333-3333-4333-8333-333333333333' });
+
+        await svc.resolveSession(request, { userId: 'user-1' });
+        await svc.resolveSession(request, { userId: 'user-1' });
+
+        assert.equal(storedUserId, 'user-1', 'the session must retain its authenticated owner');
+        assert.equal(reads, 1, 'the cache should avoid a second session lookup');
+        assert.equal(updates, 1, 'promotion should write once, not once per request');
+    });
 });
 
 describe('OPERATIONS: concurrent first visits do not error', () => {

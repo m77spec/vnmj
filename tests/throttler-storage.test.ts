@@ -2,6 +2,10 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { RedisThrottlerStorage } from '../src/common/redis-throttler.storage';
 
+// These tests cover the in-process fallback unless a test explicitly supplies a
+// fake Redis client; they must not depend on a developer's REDIS_URL.
+delete process.env.REDIS_URL;
+
 /**
  * The rate limiter has to actually stop traffic.
  *
@@ -24,6 +28,43 @@ const LIMIT = 5;
 const BLOCK = 60_000;
 
 describe('RedisThrottlerStorage', () => {
+    test('Redis path uses one atomic script call and maps the returned limit state', async () => {
+        const previousUrl = process.env.REDIS_URL;
+        process.env.REDIS_URL = 'redis://127.0.0.1:6379';
+        const storage = new RedisThrottlerStorage();
+        const originalClient = (storage as any).client;
+        const calls: unknown[][] = [];
+        (storage as any).client = {
+            eval: async (...args: unknown[]) => {
+                calls.push(args);
+                return [6, 42, 1, 60];
+            },
+            quit: async () => 'OK',
+        };
+
+        try {
+            const record = await storage.increment('client-a', TTL, LIMIT, BLOCK, 'default');
+
+            assert.deepEqual(record, {
+                totalHits: 6,
+                timeToExpire: 42,
+                isBlocked: true,
+                timeToBlockExpire: 60,
+            });
+            assert.equal(calls.length, 1, 'a request must need one Redis round trip');
+            assert.equal(calls[0][1], 2, 'the Lua script uses counter and block keys');
+            assert.equal(calls[0][2], 'rl:default:client-a');
+            assert.equal(calls[0][3], 'rl:default:client-a:blocked');
+            assert.equal(calls[0][4], 60);
+            assert.equal(calls[0][5], LIMIT);
+        } finally {
+            (storage as any).client = null;
+            originalClient.disconnect();
+            if (previousUrl === undefined) delete process.env.REDIS_URL;
+            else process.env.REDIS_URL = previousUrl;
+        }
+    });
+
     test('blocks once the limit is exceeded, and reports why', async () => {
         const storage = new RedisThrottlerStorage();
         const key = 'client-a';

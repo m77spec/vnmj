@@ -11,12 +11,15 @@
  *      REFUNDED + Stripe refund call) and never leaves a paid-but-seatless
  *      enrollment. Uses a REAL second transaction, like production.
  *   5. providerRef mismatch is refused without recording the event.
+ *   6. Optional 1,000-user enrollment stress run, measuring database transaction
+ *      latency on a single popular opening.
  *
  * Usage/deployment: runs against a throwaway DB (Docker Postgres on :5439).
  * All rows are created with a unique `suffix` and DELETED in the cleanup step,
  * so nothing is left behind even on the production DB.
  *
  * Run:  DATABASE_URL=... INTEGRATION_TEST=1 npx ts-node tests/capacity-webhook.integration.ts
+ * Stress: set CONCURRENCY_STRESS=1 to run the 1,000-user case (test DB only).
  */
 import { PrismaClient, Prisma, Role, CourseOpeningStatus, PaymentStatus, EnrollmentStatus } from '@prisma/client';
 import { EnrollmentsService } from '../src/enrollments/enrollments.service';
@@ -72,6 +75,14 @@ async function cleanup() {
 
 async function main() {
   try {
+    if (process.env.CONCURRENCY_STRESS === '1') {
+      const databaseUrl = new URL(process.env.DATABASE_URL ?? '');
+      const localHosts = new Set(['localhost', '127.0.0.1', '::1']);
+      if (!localHosts.has(databaseUrl.hostname) && process.env.ALLOW_NONLOCAL_CONCURRENCY_STRESS !== '1') {
+        throw new Error('Concurrency stress test refused: use a local test database or explicitly set ALLOW_NONLOCAL_CONCURRENCY_STRESS=1.');
+      }
+    }
+
     const suffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     const instructor = await prisma.user.create({
       data: { email: `cap-instr-${suffix}@example.com`, passwordHash: 'x', role: Role.INSTRUCTOR, language: 'en' },
@@ -134,6 +145,47 @@ async function main() {
     assert(capAfter.seatsTaken === 1, `seatsTaken must be 1, got ${capAfter.seatsTaken}`);
     winners.forEach((w) => w.status === 'fulfilled' && trackEnrollment(w.value));
     console.log('[capacity] concurrent registration on last seat: 1 winner, 1 capacity-rejected');
+
+    if (process.env.CONCURRENCY_STRESS === '1') {
+      const concurrency = Number(process.env.CONCURRENCY_STRESS_USERS ?? 1000);
+      const p95TargetMs = Number(process.env.CONCURRENCY_STRESS_P95_MS ?? 2000);
+      assert(Number.isInteger(concurrency) && concurrency >= 1000 && concurrency <= 5000, 'CONCURRENCY_STRESS_USERS must be between 1000 and 5000');
+      assert(Number.isFinite(p95TargetMs) && p95TargetMs > 0, 'CONCURRENCY_STRESS_P95_MS must be greater than zero');
+
+      const { course, opening } = await makeOpening(`stress-${concurrency}`, concurrency);
+      const students = await Promise.all(
+        Array.from({ length: concurrency }, (_, index) => makeStudent(index + 10_000)),
+      );
+      const latencies: number[] = [];
+      const results = await Promise.allSettled(students.map(async (student, index) => {
+        const startedAt = performance.now();
+        const result = await enrollSvc.enrollWithReceipt(
+          opening.id,
+          `/uploads/private/receipts/stress-${index}.png`,
+          student.id,
+        );
+        latencies.push(performance.now() - startedAt);
+        return result;
+      }));
+
+      const successful = results.filter((result) => result.status === 'fulfilled');
+      const failed = results.filter((result) => result.status === 'rejected');
+      assert(
+        failed.length === 0,
+        `${failed.length}/${concurrency} concurrent enrollments failed: ${failed.slice(0, 3).map((result) => String((result as PromiseRejectedResult).reason)).join('; ')}`,
+      );
+      successful.forEach((result) => result.status === 'fulfilled' && trackEnrollment(result.value));
+
+      const actualEnrollments = await prisma.enrollment.count({ where: { courseId: course.id } });
+      const actualOpening = await prisma.courseOpening.findUniqueOrThrow({ where: { id: opening.id } });
+      assert(actualEnrollments === concurrency, `expected ${concurrency} enrollments, got ${actualEnrollments}`);
+      assert(actualOpening.seatsTaken === concurrency, `expected ${concurrency} claimed seats, got ${actualOpening.seatsTaken}`);
+
+      latencies.sort((a, b) => a - b);
+      const p95Ms = latencies[Math.ceil(latencies.length * 0.95) - 1];
+      console.log(`[capacity] ${concurrency} concurrent enrollments: p95=${p95Ms.toFixed(0)}ms; target=${p95TargetMs}ms`);
+      assert(p95Ms <= p95TargetMs, `p95 latency ${p95Ms.toFixed(0)}ms exceeded ${p95TargetMs}ms`);
+    }
 
     // ========= 2-5. Stripe webhook atomicity & idempotency =========
     // One seat: stud1 fills it, stud2's later payment must overflow.

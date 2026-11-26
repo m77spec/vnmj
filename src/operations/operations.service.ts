@@ -121,7 +121,6 @@ export class OperationsService {
         res: Response,
         startedAt: number,
         sessionId: string | null,
-        userId: string | null = null,
     ): Promise<void> {
         try {
             const path = (req.originalUrl || req.url || '/').split('?')[0];
@@ -135,17 +134,6 @@ export class OperationsService {
             // attach the event to, and creating a session for a bot probing
             // /health would just be noise.
             if (!sessionId) return;
-
-            // The session may have been created anonymously on the very first
-            // page load and only authenticated later, so the id is refreshed here
-            // for signed-in traffic rather than trusting whatever was resolved
-            // before the guards ran.
-            if (userId) {
-                await this.prisma.visitSession.updateMany({
-                    where: { id: sessionId, userId: null },
-                    data: { userId },
-                });
-            }
 
             await this.prisma.visitEvent.create({
                 data: {
@@ -198,9 +186,9 @@ export class OperationsService {
                 // we see a token on it, which is when someone logs in on a page
                 // they were already browsing.
                 if (opts.userId && !cached.authenticated) {
-                    cached.authenticated = true;
-                    cached.expiresAt = 0; // force the write path next request
-                    void this.promoteSession(cached.sessionId, opts.userId);
+                    const promoted = await this.promoteSession(cached.sessionId, opts.userId);
+                    cached.authenticated = promoted;
+                    cached.expiresAt = promoted ? now + OperationsService.SESSION_CACHE_TTL_MS : 0;
                 }
                 return { visitorId, sessionId: cached.sessionId, isNew: false };
             }
@@ -215,11 +203,19 @@ export class OperationsService {
                 this.sessionCache.set(visitorId, {
                     sessionId: existing.id,
                     expiresAt: now + OperationsService.SESSION_CACHE_TTL_MS,
-                    authenticated: !!opts.userId,
+                    authenticated: !!existing.userId,
                 });
-                // Fire and forget: the touch is for the "last seen" column only,
-                // and nothing in the request path depends on it having landed.
-                void this.touchSession(existing.id, shouldPromote ? opts.userId : null, this.clientIp(req));
+                if (shouldPromote && opts.userId) {
+                    const promoted = await this.promoteSession(existing.id, opts.userId);
+                    const cachedSession = this.sessionCache.get(visitorId);
+                    if (cachedSession) {
+                        cachedSession.authenticated = promoted;
+                        if (!promoted) cachedSession.expiresAt = 0;
+                    }
+                } else {
+                    // Refresh last-seen data outside the request path.
+                    void this.touchSession(existing.id, null, this.clientIp(req));
+                }
                 return { visitorId, sessionId: existing.id, isNew: false };
             }
 
@@ -256,14 +252,19 @@ export class OperationsService {
                 }
                 const winner = await this.prisma.visitSession.findUnique({
                     where: { visitorId },
-                    select: { id: true },
+                    select: { id: true, userId: true },
                 });
                 if (!winner) throw createError;
                 sessionId = winner.id;
+                const authenticated = winner.userId
+                    ? true
+                    : opts.userId
+                        ? await this.promoteSession(sessionId, opts.userId)
+                        : false;
                 this.sessionCache.set(visitorId, {
                     sessionId,
-                    expiresAt: now + OperationsService.SESSION_CACHE_TTL_MS,
-                    authenticated: !!opts.userId,
+                    expiresAt: authenticated ? now + OperationsService.SESSION_CACHE_TTL_MS : 0,
+                    authenticated,
                 });
                 return { visitorId, sessionId, isNew: false };
             }
@@ -281,7 +282,7 @@ export class OperationsService {
     }
 
     /** Refresh `lastSeenAt`, and attach the user when a session is promoted. */
-    private async touchSession(sessionId: string, userId: string | null, ip?: string): Promise<void> {
+    private async touchSession(sessionId: string, userId: string | null, ip?: string): Promise<boolean> {
         try {
             await this.prisma.visitSession.update({
                 where: { id: sessionId },
@@ -291,13 +292,15 @@ export class OperationsService {
                     ...(userId ? { userId, isAuthenticated: true } : {}),
                 },
             });
+            return true;
         } catch (error) {
             this.logger.warn(`touchSession failed: ${(error as Error).message}`);
+            return false;
         }
     }
 
-    private async promoteSession(sessionId: string, userId: string): Promise<void> {
-        await this.touchSession(sessionId, userId);
+    private async promoteSession(sessionId: string, userId: string): Promise<boolean> {
+        return this.touchSession(sessionId, userId);
     }
 
     /**
