@@ -20,6 +20,7 @@ import InteractiveQuiz from '@/components/InteractiveQuiz';
 import StudentSessionList, { StudentLiveSession } from '@/components/StudentSessionList';
 import StudentAttendanceHistory from '@/components/StudentAttendanceHistory';
 import CourseEvaluationForm, { type MyCourseEvaluation } from '@/components/CourseEvaluationForm';
+import StudentTasksPanel from '@/components/StudentTasksPanel';
 
 // ---------- Types ----------
 
@@ -127,7 +128,7 @@ interface CourseData {
 }
 
 type LessonKind = 'video' | 'pdf' | 'task' | 'resource';
-type DeckTab = 'overview' | 'notes' | 'sessions' | 'discussions' | 'quizzes' | 'final' | 'batch' | 'direct';
+type DeckTab = 'overview' | 'tasks' | 'notes' | 'sessions' | 'discussions' | 'quizzes' | 'final' | 'batch' | 'direct';
 
 interface Announcement {
     id: string;
@@ -826,6 +827,7 @@ export default function CoursePlayer({ courseId }: Props) {
     const renderDeck = () => {
         const tabs: { key: DeckTab; label: string; icon: typeof BookMarked }[] = [
             { key: 'overview', label: t('player.tab_overview'), icon: BookMarked },
+            { key: 'tasks', label: t('courseDetail.tab_tasks'), icon: ClipboardList },
             { key: 'notes', label: t('player.tab_notes'), icon: StickyNote },
             // Only offered when the batch actually has a schedule, so a student
             // in a self-paced course is not shown an empty Sessions tab.
@@ -913,6 +915,11 @@ export default function CoursePlayer({ courseId }: Props) {
                                 </div>
                             )}
                         </div>
+                    )}
+                    {deckTab === 'tasks' && (
+                        progress?.openingId
+                            ? <StudentTasksPanel openingId={progress.openingId} />
+                            : <StudentTasksPanel courseId={courseId} />
                     )}
                     {deckTab === 'notes' && selected && (
                         <NotesEditor
