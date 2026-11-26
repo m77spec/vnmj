@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GamificationService } from '../gamification/gamification.service';
 import { Classroom, resolveClassroom } from '../common/classroom';
 import { AuditService } from '../audit/audit.service';
+import { deduplicateCourseModules } from '../common/course-modules';
 
 @Injectable()
 export class LessonsService {
@@ -91,29 +92,7 @@ export class LessonsService {
         outcomes: content.outcomes ?? base.outcomes,
       }];
     });
-    const lessonKey = (lesson: typeof lessons[number]) => [
-      lesson.orderIndex ?? 0,
-      (typeof lesson.titleAr === 'string' ? lesson.titleAr : '').trim().replace(/\s+/g, ' ').toLocaleLowerCase(),
-      (typeof lesson.titleEn === 'string' ? lesson.titleEn : '').trim().replace(/\s+/g, ' ').toLocaleLowerCase(),
-    ].join('|');
-    const chapterLessonKeys = new Set(
-      lessons.filter((lesson) => lesson.chapterId).map(lessonKey),
-    );
-    const seenIds = new Set<string>();
-    const seenLessonKeys = new Set<string>();
-
-    return lessons.filter((lesson) => {
-      if (seenIds.has(lesson.id)) return false;
-      seenIds.add(lesson.id);
-
-      const key = lessonKey(lesson);
-      // Replaced syllabi can leave old root lessons beside their chapter-linked copies.
-      if (!lesson.chapterId && chapterLessonKeys.has(key)) return false;
-      const structuralKey = `${lesson.chapterId || 'root'}|${key}`;
-      if (seenLessonKeys.has(structuralKey)) return false;
-      seenLessonKeys.add(structuralKey);
-      return true;
-    });
+    return deduplicateCourseModules(lessons);
   }
 
   private async assertCanEditOpening(openingId: string, actorId: string, role: Role) {

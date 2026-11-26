@@ -5,7 +5,7 @@ import { isAxiosError } from 'axios';
 import { api, API_BASE_URL, getErrorMessage } from '@/lib/api';
 import { useI18n } from '@/lib/i18n-context';
 import toast from 'react-hot-toast';
-import { Loader, ClipboardList, Send, CheckCircle, Clock, Paperclip, FileText, Trash2 } from 'lucide-react';
+import { Loader, ClipboardList, Send, CheckCircle, Clock, Paperclip, FileText, Trash2, AlertCircle, ListChecks } from 'lucide-react';
 
 interface SubmittedFile {
     url: string;
@@ -41,6 +41,9 @@ interface TaskItem {
     submissions?: SubmissionRow[];
 }
 
+type TaskStatus = 'remaining' | 'missing' | 'submitted' | 'graded';
+type TaskFilter = 'all' | 'remaining' | 'missing' | 'done';
+
 type Props =
     | { courseId: string; openingId?: never }
     | { openingId: string; courseId?: never };
@@ -49,6 +52,22 @@ function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getTaskStatus(task: TaskItem, now: number): TaskStatus {
+    const submission = task.submissions?.[0];
+    if (typeof submission?.score === 'number') return 'graded';
+    if (submission) return 'submitted';
+
+    if (task.dueDate) {
+        const dueDate = new Date(task.dueDate);
+        if (Number.isFinite(dueDate.getTime())) {
+            dueDate.setUTCHours(23, 59, 59, 999);
+            if (dueDate.getTime() < now) return 'missing';
+        }
+    }
+
+    return 'remaining';
 }
 
 export default function StudentTasksPanel({ courseId, openingId }: Props) {
@@ -61,7 +80,14 @@ export default function StudentTasksPanel({ courseId, openingId }: Props) {
     const [files, setFiles] = useState<Record<string, SubmittedFile | null>>({});
     const [uploadingId, setUploadingId] = useState<string | null>(null);
     const [submittingId, setSubmittingId] = useState<string | null>(null);
+    const [activeFilter, setActiveFilter] = useState<TaskFilter>('all');
+    const [now, setNow] = useState(() => Date.now());
     const inputs = useRef<Record<string, HTMLInputElement | null>>({});
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+        return () => window.clearInterval(timer);
+    }, []);
 
     useEffect(() => {
         let active = true;
@@ -138,13 +164,60 @@ export default function StudentTasksPanel({ courseId, openingId }: Props) {
         }
     };
 
-    const sorted = (tasks || []).slice().sort((a, b) => new Date(a.dueDate || 0).getTime() - new Date(b.dueDate || 0).getTime());
+    const allTasks = tasks || [];
+    const taskCounts = allTasks.reduce<Record<TaskStatus, number>>((counts, task) => {
+        counts[getTaskStatus(task, now)] += 1;
+        return counts;
+    }, { remaining: 0, missing: 0, submitted: 0, graded: 0 });
+    const filters: { id: TaskFilter; label: string; count: number }[] = [
+        { id: 'all', label: t('tasks.classroom_all'), count: allTasks.length },
+        { id: 'remaining', label: t('tasks.classroom_remaining'), count: taskCounts.remaining },
+        { id: 'missing', label: t('tasks.classroom_missing'), count: taskCounts.missing },
+        { id: 'done', label: t('tasks.classroom_done'), count: taskCounts.submitted + taskCounts.graded },
+    ];
+    const sorted = allTasks
+        .filter((task) => {
+            const status = getTaskStatus(task, now);
+            return activeFilter === 'all'
+                || (activeFilter === 'done' ? status === 'submitted' || status === 'graded' : status === activeFilter);
+        })
+        .slice()
+        .sort((a, b) => {
+            const dueA = a.dueDate ? new Date(a.dueDate).getTime() : Number.POSITIVE_INFINITY;
+            const dueB = b.dueDate ? new Date(b.dueDate).getTime() : Number.POSITIVE_INFINITY;
+            return dueA - dueB || a.titleAr.localeCompare(b.titleAr);
+        });
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center gap-3">
-                <ClipboardList size={24} className="text-accent" />
-                <h2 className="text-2xl font-black text-ink">{t('tasks.tasks_title')}</h2>
+            <div className="rounded-3xl border border-line bg-gradient-to-br from-brand-navy/5 via-surface-raised to-brand-gold/10 p-5 sm:p-7">
+                <div className="flex flex-wrap items-start justify-between gap-5">
+                    <div className="flex items-start gap-3">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-gold/15 text-gold-ink">
+                            <ClipboardList size={25} />
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-black text-ink">{t('tasks.classroom_heading')}</h2>
+                            <p className="mt-1 text-sm font-medium text-ink-subtle">{t('tasks.classroom_subtitle')}</p>
+                        </div>
+                    </div>
+                    {!loading && !loadError && !unresolved && (
+                        <div className="grid min-w-full grid-cols-3 gap-2 sm:min-w-0 sm:gap-3">
+                            <div className="rounded-2xl border border-line bg-surface-raised/80 px-3 py-3 text-center sm:min-w-24">
+                                <div className="text-xl font-black text-ink">{allTasks.length}</div>
+                                <div className="text-xs font-bold text-ink-subtle">{t('tasks.classroom_total')}</div>
+                            </div>
+                            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 px-3 py-3 text-center sm:min-w-24">
+                                <div className="text-xl font-black text-amber-700 dark:text-amber-300">{taskCounts.remaining}</div>
+                                <div className="text-xs font-bold text-ink-subtle">{t('tasks.classroom_remaining')}</div>
+                            </div>
+                            <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-3 py-3 text-center sm:min-w-24">
+                                <div className="text-xl font-black text-red-600 dark:text-red-400">{taskCounts.missing}</div>
+                                <div className="text-xs font-bold text-ink-subtle">{t('tasks.classroom_missing')}</div>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {loading ? (
@@ -159,20 +232,47 @@ export default function StudentTasksPanel({ courseId, openingId }: Props) {
                 <div className="text-center text-ink-subtle font-bold py-16">
                     {t('tasks.not_linked_to_batch')}
                 </div>
-            ) : sorted.length === 0 ? (
-                <div className="text-center text-ink-subtle font-bold py-16">{t('tasks.no_tasks')}</div>
             ) : (
-                <div className="space-y-4">
+                <>
+                    <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label={t('tasks.classroom_heading')}>
+                        {filters.map((filter) => (
+                            <button
+                                key={filter.id}
+                                type="button"
+                                aria-pressed={activeFilter === filter.id}
+                                onClick={() => setActiveFilter(filter.id)}
+                                className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-bold transition ${
+                                    activeFilter === filter.id
+                                        ? 'border-brand-navy bg-brand-navy text-white shadow-sm dark:border-brand-gold dark:bg-brand-gold dark:text-ink-on-gold'
+                                        : 'border-line bg-surface-raised text-ink-muted hover:border-brand-gold/50 hover:text-ink'
+                                }`}
+                            >
+                                {filter.label}
+                                <span className={`min-w-6 rounded-full px-1.5 py-0.5 text-xs ${
+                                    activeFilter === filter.id ? 'bg-white/15' : 'bg-ink/[0.06]'
+                                }`}>{filter.count}</span>
+                            </button>
+                        ))}
+                    </div>
+                    {sorted.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-line bg-surface-raised px-5 py-12 text-center">
+                            <ListChecks size={34} className="mx-auto text-ink-subtle" />
+                            <p className="mt-3 font-bold text-ink-subtle">
+                                {allTasks.length === 0 ? t('tasks.no_tasks') : t('tasks.classroom_empty_filter')}
+                            </p>
+                        </div>
+                    ) : <div className="space-y-4">
                     {sorted.map(task => {
                         const mySubmission = task.submissions?.length ? task.submissions[0] : null;
                         const graded = typeof mySubmission?.score === 'number';
-                        const overdue = task.dueDate ? new Date(task.dueDate) < new Date() : false;
+                        const status = getTaskStatus(task, now);
+                        const overdue = status === 'missing';
                         const submittedFileUrl = mySubmission?.attachmentUrl
                             ? (mySubmission.attachmentUrl.startsWith('/') ? API_BASE_URL + mySubmission.attachmentUrl : mySubmission.attachmentUrl)
                             : null;
                         const chosen = files[task.id] ?? null;
                         return (
-                            <div key={task.id} className="border border-brand-mist rounded-2xl p-5 bg-surface-raised shadow-sm">
+                            <div key={task.id} className="border border-line rounded-2xl p-5 bg-surface-raised shadow-sm">
                                 <div className="flex items-start justify-between gap-3 flex-wrap">
                                     <div>
                                         {task.module && (
@@ -181,6 +281,18 @@ export default function StudentTasksPanel({ courseId, openingId }: Props) {
                                             </p>
                                         )}
                                         <h3 className="font-bold text-ink">{pick(task, 'title')}</h3>
+                                        <span className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${
+                                            status === 'missing'
+                                                ? 'bg-red-500/10 text-red-700 dark:text-red-300'
+                                                : status === 'graded'
+                                                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                                                    : status === 'submitted'
+                                                        ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300'
+                                                        : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                                        }`}>
+                                            {status === 'missing' ? <AlertCircle size={13} /> : status === 'graded' || status === 'submitted' ? <CheckCircle size={13} /> : <Clock size={13} />}
+                                            {t(`tasks.classroom_${status}`)}
+                                        </span>
                                         {pick(task, 'description') && (
                                             <p className="text-sm text-ink-subtle mt-1 whitespace-pre-wrap">{pick(task, 'description')}</p>
                                         )}
@@ -302,7 +414,8 @@ export default function StudentTasksPanel({ courseId, openingId }: Props) {
                             </div>
                         );
                     })}
-                </div>
+                    </div>}
+                </>
             )}
         </div>
     );

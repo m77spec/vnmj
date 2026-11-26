@@ -7,6 +7,7 @@ import { CertificatesService } from '../certificates/certificates.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { mapPublicCourse, publicInstructorSelect } from '../common/public-instructor';
 import { assertLessonVideosAllowed } from '../common/course-content-type';
+import { deduplicateCourseModules } from '../common/course-modules';
 import { normalizeMeetLink } from '../common/meeting-links';
 import { CreateCourseDto, UpdateCourseDto } from './dto/create-course.dto';
 import { CreateOpeningDto } from './dto/create-opening.dto';
@@ -835,13 +836,18 @@ export class CoursesService {
                 courseId: opening.courseId,
                 OR: [{ openingId: null }, { openingId }],
             },
-            orderBy: { orderIndex: 'asc' },
+            orderBy: [
+                { chapter: { orderIndex: 'asc' } },
+                { orderIndex: 'asc' },
+                { createdAt: 'asc' },
+                { id: 'asc' },
+            ],
             include: {
                 outcomes: { orderBy: { createdAt: 'asc' } },
                 openingContents: { where: { openingId } },
             },
         });
-        return modules.flatMap((module) => {
+        const visibleModules = modules.flatMap((module) => {
             const { openingContents, ...base } = module;
             const override = openingContents[0];
             if (override?.isHidden) return [];
@@ -850,6 +856,7 @@ export class CoursesService {
                 : {};
             return [{ ...base, ...content, outcomes: content.outcomes ?? base.outcomes }];
         });
+        return deduplicateCourseModules(visibleModules);
     }
 
     async getOpeningInstructorGrants(openingId: string) {

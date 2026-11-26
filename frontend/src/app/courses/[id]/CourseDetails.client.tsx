@@ -841,7 +841,11 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                     {mode !== 'guest' && tab !== 'overview' ? (
                         <>
                             {tab === 'tasks' && mode === 'instructor' && instructorOpeningId && <TasksPanel openingId={instructorOpeningId} />}
-                            {tab === 'tasks' && mode === 'student' && <StudentTasksPanel courseId={course.id} />}
+                            {tab === 'tasks' && mode === 'student' && (
+                                access?.openingId
+                                    ? <StudentTasksPanel openingId={access.openingId} />
+                                    : <StudentTasksPanel courseId={course.id} />
+                            )}
                             {tab === 'grades' && mode === 'student' && <StudentGradesPanel courseId={course.id} />}
                             {/* Guarded on the same flag as the tab: this body had
                                 no `mode` check of its own, so it was reachable by
