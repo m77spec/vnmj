@@ -843,7 +843,7 @@ export default function CourseDetailsPage({ initialCourse }: { initialCourse?: C
                             {tab === 'tasks' && mode === 'instructor' && instructorOpeningId && <TasksPanel openingId={instructorOpeningId} />}
                             {tab === 'tasks' && mode === 'student' && (
                                 access?.openingId
-                                    ? <StudentTasksPanel openingId={access.openingId} />
+                                    ? <StudentTasksPanel openingId={access.openingId} courseId={course.id} />
                                     : <StudentTasksPanel courseId={course.id} />
                             )}
                             {tab === 'grades' && mode === 'student' && <StudentGradesPanel courseId={course.id} />}

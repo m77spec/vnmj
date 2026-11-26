@@ -44,9 +44,10 @@ interface TaskItem {
 type TaskStatus = 'remaining' | 'missing' | 'submitted' | 'graded';
 type TaskFilter = 'all' | 'remaining' | 'missing' | 'done';
 
-type Props =
-    | { courseId: string; openingId?: never }
-    | { openingId: string; courseId?: never };
+type Props = {
+    courseId?: string;
+    openingId?: string;
+};
 
 function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -101,7 +102,15 @@ export default function StudentTasksPanel({ courseId, openingId }: Props) {
                 // read it off `/enrollments/my` meant an enrollment that never
                 // recorded a batch produced "no tasks", and the student was
                 // told the course had no assignments.
-                const res = await api.get(openingId ? `/tasks/opening/${openingId}` : `/tasks/course/${courseId}`);
+                let res;
+                try {
+                    res = await api.get(openingId ? `/tasks/opening/${openingId}` : `/tasks/course/${courseId}`);
+                } catch (openingError) {
+                    if (!openingId) throw openingError;
+                    // A legacy enrollment can carry a stale/missing openingId.
+                    // Fall back to course-scoped resolution for the student.
+                    res = await api.get(`/tasks/course/${courseId}`);
+                }
                 if (!active) return;
                 setTasks(res.data || []);
                 setUnresolved(false);

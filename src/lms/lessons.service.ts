@@ -323,27 +323,41 @@ export class LessonsService {
     return map;
   }
 
+  private async resolveEnrollmentOpeningId(enrollment: { courseId: string; openingId: string | null }) {
+    if (enrollment.openingId) return enrollment.openingId;
+    const batches = await this.prisma.courseOpening.findMany({
+      where: { courseId: enrollment.courseId },
+      select: { id: true },
+      take: 2,
+    });
+    return batches.length === 1 ? batches[0].id : null;
+  }
+
   async courseProgress(courseId: string, studentId: string) {
     const enrollment = await this.prisma.enrollment.findUnique({
       where: { studentId_courseId: { studentId, courseId } },
     });
     if (!enrollment) throw new ForbiddenException('You are not enrolled in this course');
     const canViewAssets = enrollment.status === EnrollmentStatus.APPROVED;
+    const resolvedOpeningId = await this.resolveEnrollmentOpeningId(enrollment);
+    const effectiveEnrollment = resolvedOpeningId
+      ? { ...enrollment, openingId: resolvedOpeningId }
+      : enrollment;
 
     // The classroom link follows the same rule as /enrollments/my: an approved
     // student in an online batch gets the room, a PENDING applicant or a
     // REVOKED one does not. Read only, never selected into the module list.
     // The content type travels with it so the player can lead with the meeting
     // schedule on a live course instead of an empty video area.
-    const classroom = await this.classroomFor(enrollment);
+    const classroom = await this.classroomFor(effectiveEnrollment);
 
-    const modules = await this.listCourseModules(courseId, enrollment.openingId);
+    const modules = await this.listCourseModules(courseId, effectiveEnrollment.openingId);
     const progress = await this.prisma.lessonProgress.findMany({
       where: { enrollmentId: enrollment.id },
       select: { moduleId: true, completedAt: true },
     });
     const completedMap = new Map(progress.map((p) => [p.moduleId, p.completedAt]));
-    const requirements = await this.moduleRequirements(courseId, enrollment);
+    const requirements = await this.moduleRequirements(courseId, effectiveEnrollment);
 
     const list = modules.map((m: any) => {
       const owed = requirements.get(m.id) ?? { pendingTasks: 0, failedQuizzes: 0 };
@@ -378,7 +392,7 @@ export class LessonsService {
     const percent = modules.length === 0 ? 0 : Math.round((completedCount / modules.length) * 100);
     return {
       enrollmentId: enrollment.id,
-      openingId: enrollment.openingId,
+      openingId: effectiveEnrollment.openingId,
       total: modules.length,
       completed: completedCount,
       percent,

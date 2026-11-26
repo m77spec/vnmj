@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api, API_BASE_URL, getErrorMessage } from '@/lib/api';
 import { useFetchData } from '@/lib/useFetchData';
 import { useI18n } from '@/lib/i18n-context';
@@ -45,6 +45,8 @@ interface ModuleOption {
     titleAr: string;
     titleEn: string;
     orderIndex?: number | null;
+    chapterId?: string | null;
+    chapterOrderIndex?: number | null;
 }
 
 interface Task {
@@ -79,6 +81,39 @@ interface TaskForm {
 
 const emptyForm: TaskForm = { titleAr: '', titleEn: '', descriptionAr: '', descriptionEn: '', dueDate: '', maxScore: '100', moduleId: '', attachmentUrl: '', links: [] };
 
+function normalizedLessonOptions(modules: ModuleOption[]) {
+    const keyOf = (lesson: ModuleOption) => [
+        lesson.orderIndex ?? 0,
+        (lesson.titleAr || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase(),
+        (lesson.titleEn || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase(),
+    ].join('|');
+    const chapterLessonKeys = new Set(modules.filter((lesson) => lesson.chapterId).map(keyOf));
+    const seenIds = new Set<string>();
+    const seenStructuralKeys = new Set<string>();
+
+    const unique = modules.filter((lesson) => {
+        if (seenIds.has(lesson.id)) return false;
+        seenIds.add(lesson.id);
+
+        const key = keyOf(lesson);
+        if (!lesson.chapterId && chapterLessonKeys.has(key)) return false;
+
+        const structuralKey = `${lesson.chapterId || 'root'}|${key}`;
+        if (seenStructuralKeys.has(structuralKey)) return false;
+        seenStructuralKeys.add(structuralKey);
+        return true;
+    });
+
+    return unique.slice().sort((left, right) => {
+        const leftChapter = left.chapterOrderIndex ?? (left.chapterId ? 0 : -1);
+        const rightChapter = right.chapterOrderIndex ?? (right.chapterId ? 0 : -1);
+        return leftChapter - rightChapter
+            || (left.orderIndex ?? 0) - (right.orderIndex ?? 0)
+            || (left.titleAr || '').localeCompare(right.titleAr || '')
+            || left.id.localeCompare(right.id);
+    });
+}
+
 export default function TasksPanel({
     openingId,
     canManageTasks = true,
@@ -105,6 +140,7 @@ export default function TasksPanel({
     const [filterStatus, setFilterStatus] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [peerReviewSubId, setPeerReviewSubId] = useState<string | null>(null);
+    const lessonOptions = useMemo(() => normalizedLessonOptions(modules), [modules]);
     const rosterPath = canGrade
         ? `/openings/${openingId}/roster`
         : canManageTasks ? `/tasks/opening/${openingId}/roster` : null;
@@ -289,7 +325,7 @@ export default function TasksPanel({
                     <select value={filterModule} onChange={e => setFilterModule(e.target.value)}
                         className="px-3 py-2.5 bg-ink/[0.04] border border-line rounded-xl text-ink text-sm focus:ring-2 focus:ring-brand-gold/40 outline-none">
                         <option value="all">{isAr ? 'كل الوحدات' : 'All Modules'}</option>
-                        {modules.map(m => <option key={m.id} value={m.id}>{pick(m, 'title')}</option>)}
+                        {lessonOptions.map(m => <option key={m.id} value={m.id}>{pick(m, 'title')}</option>) }
                     </select>
                     <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
                         className="px-3 py-2.5 bg-ink/[0.04] border border-line rounded-xl text-ink text-sm focus:ring-2 focus:ring-brand-gold/40 outline-none">
@@ -496,8 +532,8 @@ export default function TasksPanel({
                                 <label className="block text-sm font-bold text-ink-muted mb-1">{t('tasks.lecture_label')}</label>
                                 <select value={form.moduleId} onChange={(e) => setForm({ ...form, moduleId: e.target.value })} className={inputCls}>
                                     <option value="">{t('tasks.no_lecture')}</option>
-                                    {modules.map((mod) => (
-                                        <option key={mod.id} value={mod.id}>{pick(mod, 'title')}</option>
+                                    {lessonOptions.map((mod, index) => (
+                                        <option key={mod.id} value={mod.id}>{index + 1}. {pick(mod, 'title')}</option>
                                     ))}
                                 </select>
                             </div>

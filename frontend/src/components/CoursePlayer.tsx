@@ -918,7 +918,7 @@ export default function CoursePlayer({ courseId }: Props) {
                     )}
                     {deckTab === 'tasks' && (
                         progress?.openingId
-                            ? <StudentTasksPanel openingId={progress.openingId} />
+                            ? <StudentTasksPanel openingId={progress.openingId} courseId={courseId} />
                             : <StudentTasksPanel courseId={courseId} />
                     )}
                     {deckTab === 'notes' && selected && (
